@@ -256,46 +256,50 @@ const camera=new T.PerspectiveCamera(46, innerWidth/innerHeight, 0.5, 6000);
 const renderer=new T.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap;
-renderer.outputEncoding=T.sRGBEncoding; renderer.toneMapping=T.ACESFilmicToneMapping; renderer.toneMappingExposure=1.18;
+renderer.outputEncoding=T.sRGBEncoding; renderer.toneMapping=T.ACESFilmicToneMapping; renderer.toneMappingExposure=1.32;
 renderer.localClippingEnabled=true; app.appendChild(renderer.domElement);
 
 (function(){ const c=document.createElement('canvas');c.width=4;c.height=512;const x=c.getContext('2d');
   const g=x.createLinearGradient(0,0,0,512);g.addColorStop(0,'#11151c');g.addColorStop(0.55,'#0a0c10');g.addColorStop(1,'#06070a');
   x.fillStyle=g;x.fillRect(0,0,4,512);const t=new T.CanvasTexture(c);t.encoding=T.sRGBEncoding;scene.background=t;})();
 let ENV=null;
-(function(){ try{ const p=new T.PMREMGenerator(renderer);const c=document.createElement('canvas');c.width=8;c.height=256;const x=c.getContext('2d');
-  const g=x.createLinearGradient(0,0,0,256);g.addColorStop(0,'#7d8aa6');g.addColorStop(0.5,'#2a3140');g.addColorStop(1,'#0c0e12');
-  x.fillStyle=g;x.fillRect(0,0,8,256);const t=new T.CanvasTexture(c);t.mapping=T.EquirectangularReflectionMapping;
+(function(){ try{ const p=new T.PMREMGenerator(renderer);const c=document.createElement('canvas');c.width=16;c.height=512;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,512);
+  g.addColorStop(0,'#e6ecf6'); g.addColorStop(0.32,'#9fb0cb'); g.addColorStop(0.49,'#c2ccdb'); g.addColorStop(0.52,'#7c8aa1'); g.addColorStop(0.78,'#3c4452'); g.addColorStop(1,'#161a22');
+  x.fillStyle=g;x.fillRect(0,0,16,512);
+  x.fillStyle='rgba(255,255,255,0.55)'; x.fillRect(0,6,16,30);                       // overhead softbox highlight
+  const t=new T.CanvasTexture(c);t.mapping=T.EquirectangularReflectionMapping;
   ENV=p.fromEquirectangular(t).texture; scene.environment=ENV; t.dispose();p.dispose(); }catch(e){} })();
 
 // ===================== LIGHTS =====================
-scene.add(new T.HemisphereLight(0xbcc8dc,0x0c0e12,0.75));
-const key=new T.DirectionalLight(0xffffff,1.05); key.position.set(180,300,160); key.castShadow=true;
-key.shadow.mapSize.set(2048,2048); const sh=420,sc=key.shadow.camera; sc.left=-sh;sc.right=sh;sc.top=sh;sc.bottom=-sh;sc.near=20;sc.far=1100;
+scene.add(new T.HemisphereLight(0xcfdaee,0x191d26,1.0));
+scene.add(new T.AmbientLight(0x3a4150,0.22));
+const key=new T.DirectionalLight(0xfff3e4,1.32); key.position.set(180,300,160); key.castShadow=true;
+key.shadow.mapSize.set(2048,2048); const sh=520,sc=key.shadow.camera; sc.left=-sh;sc.right=sh;sc.top=sh;sc.bottom=-sh;sc.near=20;sc.far=1500;
 key.shadow.bias=-0.0004; key.shadow.normalBias=0.7; scene.add(key);
-const fill=new T.DirectionalLight(0x6f8bd0,0.3); fill.position.set(-180,120,-160); scene.add(fill);
-const rim=new T.DirectionalLight(0xffd0a0,0.55); rim.position.set(80,90,-240); scene.add(rim);
+const fill=new T.DirectionalLight(0x8aa0d8,0.5); fill.position.set(-180,120,-160); scene.add(fill);
+const rim=new T.DirectionalLight(0xffd0a0,0.72); rim.position.set(80,90,-240); scene.add(rim);
 
 // ===================== PROCEDURAL TEXTURES =====================
 function tex(draw,w,h,rx,ry,enc){ w=w||256;h=h||256; const c=document.createElement('canvas');c.width=w;c.height=h;
   draw(c.getContext('2d'),w,h); const t=new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping; if(rx||ry)t.repeat.set(rx||1,ry||1);
-  t.anisotropy=4; if(enc)t.encoding=T.sRGBEncoding; return t; }
-function noise(x,w,h,base,amt,a){ x.fillStyle=base;x.fillRect(0,0,w,h); for(let i=0;i<w*h*0.12;i++){ const px=Math.random()*w,py=Math.random()*h;
-  const v=(Math.random()-0.5)*amt; x.fillStyle='rgba('+(v>0?255:0)+','+(v>0?255:0)+','+(v>0?255:0)+','+(Math.abs(v)/255*(a||0.5))+')'; x.fillRect(px,py,1.4,1.4); } }
+  t.anisotropy=8; if(enc)t.encoding=T.sRGBEncoding; return t; }
+function noise(x,w,h,base,amt,a){ x.fillStyle=base;x.fillRect(0,0,w,h); for(let i=0;i<w*h*0.07;i++){ const px=Math.random()*w,py=Math.random()*h;
+  const v=(Math.random()-0.5)*amt; x.fillStyle='rgba('+(v>0?255:0)+','+(v>0?255:0)+','+(v>0?255:0)+','+(Math.abs(v)/255*(a||0.4))+')'; x.fillRect(px,py,1,1); } }
 // brushed aluminium (horizontal grain)
 const txAlu=tex((x,w,h)=>{ noise(x,w,h,'#9aa1ab',60,0.25);
   for(let i=0;i<420;i++){ const y=Math.random()*h; x.strokeStyle='rgba(255,255,255,'+(Math.random()*0.05)+')'; x.beginPath();x.moveTo(0,y);x.lineTo(w,y);x.stroke();
     x.strokeStyle='rgba(0,0,0,'+(Math.random()*0.05)+')'; x.beginPath();x.moveTo(0,y+0.5);x.lineTo(w,y+0.5);x.stroke(); }},256,256,1,1,true);
 // black anodized extrusion side with T-slot channel
-function txExtrusion(rep){ return tex((x,w,h)=>{ noise(x,w,h,'#2a2f38',26,0.3);
+function txExtrusion(rep){ return tex((x,w,h)=>{ noise(x,w,h,'#3c424c',22,0.3);
   // bevels at edges + central slot
-  x.fillStyle='#1b1f27'; x.fillRect(0,0,w,4); x.fillRect(0,h-4,w,4);
-  x.fillStyle='#10131a'; x.fillRect(0,h*0.5-9,w,18);                 // slot channel
-  x.fillStyle='#3a4150'; x.fillRect(0,h*0.5-11,w,2); x.fillRect(0,h*0.5+9,w,2);
-  x.fillStyle='rgba(255,255,255,0.04)'; x.fillRect(0,6,w,2); },128,128,rep||1,1,true); }
+  x.fillStyle='#2a2f38'; x.fillRect(0,0,w,4); x.fillRect(0,h-4,w,4);
+  x.fillStyle='#20242c'; x.fillRect(0,h*0.5-9,w,18);                 // slot channel
+  x.fillStyle='#525a68'; x.fillRect(0,h*0.5-11,w,2); x.fillRect(0,h*0.5+9,w,2);
+  x.fillStyle='rgba(255,255,255,0.05)'; x.fillRect(0,6,w,2); },128,128,rep||1,1,true); }
 const txExtr=txExtrusion(1);
 // black steel / motor body
-const txSteel=tex((x,w,h)=>{ noise(x,w,h,'#1a1d23',30,0.4);
+const txSteel=tex((x,w,h)=>{ noise(x,w,h,'#32373f',22,0.35);
   for(let i=0;i<120;i++){const y=Math.random()*h;x.strokeStyle='rgba(255,255,255,'+(Math.random()*0.03)+')';x.beginPath();x.moveTo(0,y);x.lineTo(w,y);x.stroke();}},256,256,1,1,true);
 // knurled grip
 const txKnurl=tex((x,w,h)=>{ x.fillStyle='#8b929c';x.fillRect(0,0,w,h); x.strokeStyle='rgba(0,0,0,0.5)';x.lineWidth=1.4;
@@ -308,28 +312,28 @@ function txCopper(hex){ return tex((x,w,h)=>{ x.fillStyle=hex||'#c8742a';x.fillR
 const txRubber=tex((x,w,h)=>{ noise(x,w,h,'#15171c',18,0.4);
   for(let i=0;i<w;i+=4){x.fillStyle='rgba(0,0,0,0.4)';x.fillRect(i,0,2,h);} },64,64,1,4);
 // 3D-printed nylon bobbin (layer lines)
-const txPrint=tex((x,w,h)=>{ x.fillStyle='#20242c';x.fillRect(0,0,w,h);
-  for(let i=0;i<h;i+=4){x.fillStyle='rgba(255,255,255,0.04)';x.fillRect(0,i,w,1);x.fillStyle='rgba(0,0,0,0.18)';x.fillRect(0,i+2,w,1);} },128,128,1,3,true);
+const txPrint=tex((x,w,h)=>{ x.fillStyle='#343a45';x.fillRect(0,0,w,h);
+  for(let i=0;i<h;i+=4){x.fillStyle='rgba(255,255,255,0.05)';x.fillRect(0,i,w,1);x.fillStyle='rgba(0,0,0,0.16)';x.fillRect(0,i+2,w,1);} },128,128,1,3,true);
 // concrete factory floor
-const txFloor=tex((x,w,h)=>{ noise(x,w,h,'#1b1e24',40,0.5);
-  for(let i=0;i<60;i++){x.strokeStyle='rgba(0,0,0,'+(Math.random()*0.15)+')';x.lineWidth=Math.random()*2;x.beginPath();const sx=Math.random()*w,sy=Math.random()*h;x.moveTo(sx,sy);x.lineTo(sx+(Math.random()-0.5)*60,sy+(Math.random()-0.5)*60);x.stroke();}
-  x.strokeStyle='rgba(0,0,0,0.4)';x.lineWidth=3; x.strokeRect(0,0,w,h); },512,512,8,8,true);
+const txFloor=tex((x,w,h)=>{ noise(x,w,h,'#565b64',26,0.4);
+  for(let i=0;i<60;i++){x.strokeStyle='rgba(0,0,0,'+(Math.random()*0.12)+')';x.lineWidth=Math.random()*2;x.beginPath();const sx=Math.random()*w,sy=Math.random()*h;x.moveTo(sx,sy);x.lineTo(sx+(Math.random()-0.5)*60,sy+(Math.random()-0.5)*60);x.stroke();}
+  x.strokeStyle='rgba(0,0,0,0.3)';x.lineWidth=3; x.strokeRect(0,0,w,h); },512,512,8,8,true);
 
 // ===================== MATERIALS =====================
 const M={
-  alu:   new T.MeshStandardMaterial({map:txAlu,color:0xb9c0ca,roughness:0.42,metalness:0.92,envMapIntensity:1.1}),
-  extr:  new T.MeshStandardMaterial({map:txExtr,color:0x39404c,roughness:0.55,metalness:0.7,envMapIntensity:0.9}),
-  steel: new T.MeshStandardMaterial({map:txSteel,color:0x2a2f38,roughness:0.45,metalness:0.92,envMapIntensity:1.0}),
-  bright:new T.MeshStandardMaterial({color:0xc7ced9,roughness:0.18,metalness:1.0,envMapIntensity:1.25}),
-  knurl: new T.MeshStandardMaterial({map:txKnurl,color:0x9aa1ab,roughness:0.4,metalness:0.95,envMapIntensity:1.1}),
-  motor: new T.MeshStandardMaterial({map:txSteel,color:0x15171c,roughness:0.5,metalness:0.55}),
-  cap:   new T.MeshStandardMaterial({color:0x0c0d10,roughness:0.7,metalness:0.3}),
-  rubber:new T.MeshStandardMaterial({map:txRubber,color:0x101216,roughness:0.85,metalness:0.1}),
-  print: new T.MeshStandardMaterial({map:txPrint,color:0x222831,roughness:0.7,metalness:0.15})
+  alu:   new T.MeshStandardMaterial({map:txAlu,color:0xc2c9d3,roughness:0.4,metalness:0.9,envMapIntensity:1.15}),
+  extr:  new T.MeshStandardMaterial({map:txExtr,color:0x4b525f,roughness:0.52,metalness:0.5,envMapIntensity:1.05}),
+  steel: new T.MeshStandardMaterial({map:txSteel,color:0x3a404a,roughness:0.4,metalness:0.88,envMapIntensity:1.1}),
+  bright:new T.MeshStandardMaterial({color:0xccd3de,roughness:0.16,metalness:1.0,envMapIntensity:1.3}),
+  knurl: new T.MeshStandardMaterial({map:txKnurl,color:0xa1a8b2,roughness:0.38,metalness:0.92,envMapIntensity:1.15}),
+  motor: new T.MeshStandardMaterial({map:txSteel,color:0x262b35,roughness:0.46,metalness:0.5,envMapIntensity:0.95}),
+  cap:   new T.MeshStandardMaterial({color:0x161a22,roughness:0.66,metalness:0.32}),
+  rubber:new T.MeshStandardMaterial({map:txRubber,color:0x14161c,roughness:0.85,metalness:0.1}),
+  print: new T.MeshStandardMaterial({map:txPrint,color:0x2c323d,roughness:0.68,metalness:0.12,envMapIntensity:0.8})
 };
-M.brass=new T.MeshStandardMaterial({color:0xb8893a,roughness:0.4,metalness:0.85,envMapIntensity:1.1});
-M.box  =new T.MeshStandardMaterial({color:0x14181f,roughness:0.6,metalness:0.4});
-const floorMat=new T.MeshStandardMaterial({map:txFloor,color:0x33383f,roughness:0.92,metalness:0.05});
+M.brass=new T.MeshStandardMaterial({color:0xc0913f,roughness:0.36,metalness:0.85,envMapIntensity:1.15});
+M.box  =new T.MeshStandardMaterial({color:0x252b37,roughness:0.54,metalness:0.34,envMapIntensity:0.95});
+const floorMat=new T.MeshStandardMaterial({map:txFloor,color:0xc4cad3,roughness:0.78,metalness:0.14,envMapIntensity:0.7});
 
 // ===================== FLOOR + AMBIENCE =====================
 const floor=new T.Mesh(new T.PlaneGeometry(4000,4000),floorMat); floor.rotation.x=-Math.PI/2; floor.position.y=-0.5; floor.receiveShadow=true; scene.add(floor);
