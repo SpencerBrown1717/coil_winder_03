@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Coil Foundry — Winding Line</title>
+<style>
+  :root{
+    --bg:#0a0c10; --panel:rgba(18,21,28,.84); --line:#262c38; --line-soft:#1c212b;
+    --ink:#eaeef5; --dim:#8b95a6; --accent:#c8742a; --accent-2:#e89a52;
+    --cyan:#2fe0d8; --cyan-ink:#aefff8; --ok:#57d98a;
+    --mono: ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--sans);}
+  #app{position:fixed;inset:0;}
+  canvas{display:block;touch-action:none;}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:2;box-shadow:inset 0 0 260px 50px rgba(0,0,0,.6);}
+
+  .topbar{position:absolute;top:0;left:0;right:0;z-index:6;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;pointer-events:none;}
+  .brand h1{margin:0;font-size:13px;letter-spacing:.26em;text-transform:uppercase;font-weight:700;}
+  .brand h1 .dot{color:var(--accent);}
+  .brand span{display:block;margin-top:4px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;}
+  .stats{display:flex;gap:8px;pointer-events:none;flex-wrap:wrap;justify-content:flex-end;}
+  .chip{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:7px 11px;backdrop-filter:blur(10px);min-width:78px;}
+  .chip .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;}
+  .chip .val{font-family:var(--mono);font-size:13.5px;font-weight:600;margin-top:2px;color:var(--ink);}
+
+  .rail{position:absolute;right:18px;top:96px;z-index:6;display:flex;flex-direction:column;gap:10px;align-items:flex-end;}
+  .lcd,.epanel{width:200px;font-family:var(--mono);border-radius:11px;padding:12px 14px;overflow:hidden;}
+  .lcd{background:linear-gradient(180deg,#0d1820,#08111a);border:1px solid #12423f;
+    box-shadow:0 0 0 1px #0008,0 0 26px -8px var(--cyan),inset 0 0 30px -16px var(--cyan);}
+  .lcd::after{content:"";position:absolute;inset:0;pointer-events:none;}
+  .lcd .hd,.epanel .eh{font-size:9px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px;}
+  .lcd .hd{color:#3d8b86;}
+  .lcd .r,.epanel .r{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;line-height:1.9;}
+  .lcd .k{color:#3d8b86;letter-spacing:.05em;}
+  .lcd .v{color:var(--cyan-ink);font-weight:600;}
+  .lcd .state{margin-top:6px;display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.1em;color:var(--cyan);}
+  .lcd .led{width:8px;height:8px;border-radius:50%;background:#1c4b48;box-shadow:0 0 0 2px #0a1f1e;}
+  .lcd.run .led{background:var(--ok);box-shadow:0 0 8px var(--ok);}
+  .lcd.busy .led{background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .epanel{background:linear-gradient(180deg,#1a130b,#110c06);border:1px solid #5a3a16;
+    box-shadow:0 0 0 1px #0008,0 0 26px -8px var(--accent),inset 0 0 30px -16px var(--accent);transition:.25s;}
+  .epanel .eh{color:#b07a3a;}
+  .epanel .eh::before{content:"";width:6px;height:6px;border-radius:50%;background:#5a3a16;}
+  .epanel .k{color:#8a6336;}
+  .epanel .v{color:var(--accent-2);font-weight:600;}
+  .epanel.on{border-color:#2fe0d8;box-shadow:0 0 0 1px #0008,0 0 30px -6px var(--cyan),inset 0 0 30px -14px var(--cyan);}
+  .epanel.on .eh{color:var(--cyan);} .epanel.on .eh::before{background:var(--cyan);box-shadow:0 0 8px var(--cyan);}
+  .ppanel{width:200px;font-family:var(--mono);border-radius:11px;padding:12px 14px;background:linear-gradient(180deg,#10141b,#0b0e14);border:1px solid #29303d;box-shadow:0 0 0 1px #0008,inset 0 0 24px -16px #6f8bd0;}
+  .ppanel .ph{font-size:9px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:7px;color:#7d8aa6;display:flex;align-items:center;gap:6px;}
+  .ppanel .ph::before{content:"";width:6px;height:6px;border-radius:50%;background:#3a455a;}
+  .ppanel .r{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;line-height:1.85;}
+  .ppanel .k{color:#67718a;letter-spacing:.05em;} .ppanel .v{color:#cdd6e4;font-weight:600;}
+  .pstat{margin-top:8px;font-size:10px;line-height:1.35;letter-spacing:.02em;padding:6px 8px;border-radius:7px;border:1px solid var(--line);}
+  .pstat.ok{color:#9be8b8;background:rgba(50,150,90,.12);border-color:#1f5b3a;}
+  .pstat.hot{color:#f0c089;background:rgba(180,120,40,.12);border-color:#6a4a18;}
+  .pstat.bad{color:#ff9b91;background:rgba(180,50,40,.14);border-color:#6a2420;}
+  .ebtn{margin-top:9px;width:100%;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.05em;padding:8px;border-radius:8px;cursor:pointer;background:#1c212b;border:1px solid var(--line);color:var(--ink);transition:.15s;}
+  .ebtn:hover{border-color:#3a455a;}
+  .ebtn.on{background:var(--cyan);border-color:var(--cyan);color:#06201f;box-shadow:0 0 18px -4px var(--cyan);}
+
+  .tools{position:absolute;left:16px;top:50%;transform:translateY(-50%);z-index:6;display:flex;flex-direction:column;gap:8px;}
+  .tbtn{position:relative;width:42px;height:42px;display:grid;place-items:center;background:var(--panel);border:1px solid var(--line);border-radius:11px;color:var(--dim);cursor:pointer;backdrop-filter:blur(10px);transition:.15s;}
+  .tbtn:hover{color:var(--ink);border-color:#3a455a;}
+  .tbtn.active{color:#1a0c05;background:var(--accent);border-color:var(--accent);}
+  .tbtn svg{width:19px;height:19px;}
+  .tbtn[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:52px;top:50%;transform:translateY(-50%);white-space:nowrap;background:#0e1118;border:1px solid var(--line);color:var(--ink);font-size:11px;padding:5px 9px;border-radius:7px;pointer-events:none;font-family:var(--mono);letter-spacing:.03em;}
+  .tdiv{height:1px;background:var(--line);margin:2px 6px;}
+
+  .clip{position:absolute;left:74px;top:50%;transform:translateY(-50%);z-index:6;display:none;flex-direction:column;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:12px 8px;backdrop-filter:blur(10px);}
+  .clip.show{display:flex;}
+  .clip input[type=range]{writing-mode:vertical-lr;direction:rtl;width:6px;height:150px;accent-color:var(--accent);}
+  .clip .lab{font-family:var(--mono);font-size:8.5px;color:var(--dim);letter-spacing:.1em;}
+
+  .dock{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:6;width:min(97vw,1040px);background:var(--panel);border:1px solid var(--line);border-radius:16px;backdrop-filter:blur(12px);overflow:hidden;}
+  .controls{display:flex;align-items:center;gap:10px;padding:12px 14px;flex-wrap:wrap;justify-content:center;}
+  .sep{width:1px;align-self:stretch;background:var(--line-soft);}
+  button.btn{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);background:#1c212b;border:1px solid var(--line);padding:9px 13px;border-radius:9px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;}
+  button.btn:hover{border-color:#3a455a;background:#232a37;}
+  button.btn:active{transform:translateY(1px);}
+  button.btn.primary{background:var(--accent);border-color:var(--accent);color:#1a0c05;min-width:118px;justify-content:center;}
+  button.btn.primary:hover{background:var(--accent-2);}
+  button.btn svg{width:14px;height:14px;}
+  label.ctl{display:flex;flex-direction:column;gap:3px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);}
+  select{font-family:var(--sans);font-size:13px;color:var(--ink);background:#1c212b;border:1px solid var(--line);border-radius:8px;padding:7px 9px;cursor:pointer;}
+  input[type=number]{font-family:var(--sans);font-size:13px;color:var(--ink);background:#1c212b;border:1px solid var(--line);border-radius:8px;padding:7px 9px;width:62px;}
+  input[type=range].h{width:88px;accent-color:var(--accent);}
+  .swatches{display:flex;gap:5px;}
+  .sw{width:20px;height:20px;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:.12s;}
+  .sw:hover{transform:scale(1.12);} .sw.sel{border-color:#fff;}
+  input[type=color]{width:30px;height:30px;padding:0;border:1px solid var(--line);border-radius:7px;background:#1c212b;cursor:pointer;}
+  .toggle{display:inline-flex;align-items:center;gap:6px;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);cursor:pointer;user-select:none;}
+  .toggle input{width:0;height:0;opacity:0;position:absolute;}
+  .toggle .swch{width:34px;height:19px;border-radius:11px;background:#1b202a;border:1px solid var(--line);position:relative;transition:.15s;}
+  .toggle .swch::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--dim);transition:.15s;}
+  .toggle input:checked + .swch{background:var(--accent);border-color:var(--accent);}
+  .toggle input:checked + .swch::after{left:17px;background:#1a0c05;}
+
+  .hint{position:absolute;left:18px;bottom:18px;z-index:5;font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.04em;pointer-events:none;}
+
+  /* BOM overlay */
+  .bom{position:fixed;inset:0;z-index:18;display:none;place-items:center;background:rgba(4,6,9,.72);backdrop-filter:blur(4px);}
+  .bom.show{display:grid;}
+  .bom .card{width:min(94vw,720px);max-height:84vh;overflow:auto;background:#0e1218;border:1px solid var(--line);border-radius:14px;padding:22px;box-shadow:0 30px 80px -20px #000;}
+  .bom h2{margin:0 0 4px;font-size:14px;letter-spacing:.2em;text-transform:uppercase;}
+  .bom .sub{font-family:var(--mono);font-size:11px;color:var(--dim);margin-bottom:16px;}
+  .bom table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .bom th,.bom td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line-soft);}
+  .bom th{font-family:var(--mono);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);}
+  .bom td.spec{color:var(--dim);font-family:var(--mono);font-size:11.5px;}
+  .bom td.q{text-align:center;font-family:var(--mono);}
+  .bom .foot{display:flex;justify-content:space-between;align-items:center;margin-top:16px;gap:10px;flex-wrap:wrap;}
+  .bom .foot .note{font-family:var(--mono);font-size:10px;color:var(--dim);}
+
+  .overlay{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:radial-gradient(circle at 50% 40%,#11151c,#06080b);color:var(--ink);text-align:center;}
+  .overlay .box{max-width:340px;padding:24px;}
+  .overlay h2{margin:0 0 8px;font-size:15px;letter-spacing:.18em;text-transform:uppercase;}
+  .overlay p{margin:0;color:var(--dim);font-family:var(--mono);font-size:12px;line-height:1.7;}
+  .spin{width:30px;height:30px;border:3px solid #222a36;border-top-color:var(--accent);border-radius:50%;margin:0 auto 16px;animation:sp 1s linear infinite;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+
+  @media (max-width:640px){
+    .rail{top:auto;bottom:184px;right:12px;gap:8px;}
+    .lcd,.epanel{width:150px;padding:10px;}
+    .tools{left:10px;gap:6px;} .tbtn{width:38px;height:38px;}
+    .clip{left:56px;} .chip{min-width:0;padding:6px 8px;} .chip .lab{font-size:8px;}
+    .hint{display:none;} .controls{gap:7px;padding:9px;} input[type=range].h{width:64px;}
+  }
+  @media (prefers-reduced-motion:reduce){ .spin{animation:none;} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="vignette"></div>
+
+<div class="topbar">
+  <div class="brand">
+    <h1>Coil Foundry<span class="dot">.</span></h1>
+    <span>Automated winding line</span>
+  </div>
+  <div class="stats">
+    <div class="chip"><div class="lab">Stations</div><div class="val" id="sStations">0</div></div>
+    <div class="chip"><div class="lab">Coils Done</div><div class="val" id="sDone">0</div></div>
+    <div class="chip"><div class="lab">Output</div><div class="val" id="sRate">0 /hr</div></div>
+    <div class="chip"><div class="lab">Copper</div><div class="val" id="sFil">0.0 m</div></div>
+  </div>
+</div>
+
+<div class="rail">
+  <div class="lcd" id="lcd">
+    <div class="hd">Station 1</div>
+    <div class="r"><span class="k">TRAVERSE</span><span class="v" id="rx">0.0</span></div>
+    <div class="r"><span class="k">RPM</span><span class="v" id="rRpm">0</span></div>
+    <div class="r"><span class="k">PITCH</span><span class="v" id="rPitch">0.00</span></div>
+    <div class="r"><span class="k">LAYER</span><span class="v" id="rl">0 / 0</span></div>
+    <div class="state"><span class="led" id="led"></span><span id="rs">READY</span></div>
+  </div>
+  <div class="epanel" id="epanel">
+    <div class="eh">Electromagnetic</div>
+    <div class="r"><span class="k">TURNS</span><span class="v" id="eN">0</span></div>
+    <div class="r"><span class="k">RESISTANCE</span><span class="v" id="eR">0 mΩ</span></div>
+    <div class="r"><span class="k">INDUCTANCE</span><span class="v" id="eL">0 µH</span></div>
+    <div class="r"><span class="k">FIELD @1A</span><span class="v" id="eB">— mT</span></div>
+    <div class="r"><span class="k">CORE</span><span class="v" id="eMu">Air core · µ 1×</span></div>
+    <div class="r"><span class="k">COIL TEMP</span><span class="v" id="eT">20 °C</span></div>
+    <button class="ebtn" id="energize">Energize</button>
+  </div>
+  <div class="ppanel" id="ppanel">
+    <div class="ph">Process</div>
+    <div class="r"><span class="k">TENSION</span><span class="v" id="pTen">0 N</span></div>
+    <div class="r"><span class="k">TORQUE</span><span class="v" id="pTq">0 %</span></div>
+    <div class="r"><span class="k">CURRENT</span><span class="v" id="pI">— A</span></div>
+    <div class="r"><span class="k">POWER</span><span class="v" id="pP">— W</span></div>
+    <div class="r"><span class="k">FILL</span><span class="v" id="pFill">0 %</span></div>
+    <div class="pstat ok" id="pStat">All process windows pass</div>
+  </div>
+</div>
+
+<div class="tools">
+  <div class="tbtn" id="vLine" data-tip="Line view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="9" width="5" height="6"/><rect x="10" y="9" width="5" height="6"/><rect x="17" y="9" width="4" height="6"/></svg></div>
+  <div class="tbtn" id="vStation" data-tip="Station view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 3v18M4 7.5l8 4.5 8-4.5"/></svg></div>
+  <div class="tbtn" id="vTop" data-tip="Top view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 4l16 16M20 4L4 20"/></svg></div>
+  <div class="tdiv"></div>
+  <div class="tbtn" id="bAuto" data-tip="Auto-rotate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 4v5h-5"/></svg></div>
+  <div class="tbtn" id="bClip" data-tip="Section coil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h18"/><path d="M7 12l3-7h4l3 7"/><path d="M5 16h14" stroke-dasharray="2 2"/></svg></div>
+  <div class="tbtn" id="bBom" data-tip="Bill of materials"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 3h9l3 3v15H6z"/><path d="M9 9h6M9 13h6M9 17h4"/></svg></div>
+  <div class="tdiv"></div>
+  <div class="tbtn" id="bSound" data-tip="Sound on/off"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg></div>
+  <div class="tbtn" id="bShot" data-tip="Screenshot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.2"/></svg></div>
+</div>
+
+<div class="clip" id="clipUI"><span class="lab">CUT</span><input type="range" id="clipR" min="-30" max="30" step="0.5" value="30"><span class="lab">X</span></div>
+
+<div class="dock">
+  <div class="controls">
+    <button class="btn primary" id="playBtn"><svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><span id="playLbl">Run Line</span></button>
+    <button class="btn" id="resetBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>Reset</button>
+    <div class="sep"></div>
+    <label class="ctl">Stations
+      <select id="stationsSel"><option value="1">1</option><option value="2">2</option><option value="4" selected>4</option><option value="6">6</option><option value="12">12</option><option value="24">24</option></select>
+    </label>
+    <label class="ctl">Core
+      <select id="coreSel"><option value="air" selected>Air</option><option value="ferrite">Ferrite</option><option value="powder">Powdered iron</option><option value="steel">Silicon steel</option></select>
+    </label>
+    <label class="toggle"><input type="checkbox" id="jobShopChk"><span class="swch"></span>Job shop</label>
+    <label class="ctl">Preset
+      <select id="modelSel"><option value="large">Large coil</option><option value="small">Small coil</option><option value="custom">Custom</option></select>
+    </label>
+    <label class="ctl">Gauge <select id="awgSel"></select></label>
+    <label class="ctl">Turns <input type="number" id="turnsIn" min="1" max="600" step="1" value="26"></label>
+    <label class="ctl">Pattern
+      <select id="modeSel"><option value="helical">Helical</option><option value="orthocyclic">Orthocyclic</option><option value="spaced">Spaced</option></select>
+    </label>
+    <label class="ctl">Spacing × <input type="range" class="h" id="spacing" min="1" max="3" step="0.1" value="1.6"></label>
+    <label class="ctl">Speed <input type="range" class="h" id="speed" min="0.5" max="8" step="0.5" value="3"></label>
+    <div class="sep"></div>
+    <label class="ctl">Wire <div class="swatches" id="swatches"></div></label>
+    <input type="color" id="color" value="#c8742a" title="Custom color">
+    <label class="toggle"><input type="checkbox" id="rainbow"><span class="swch"></span>Layer tint</label>
+    <div class="sep"></div>
+    <button class="btn" id="exportBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4M5 21h14"/></svg>Spec</button>
+  </div>
+</div>
+
+<div class="hint">drag orbit &middot; scroll zoom &middot; space run &middot; R reset</div>
+
+<div class="bom" id="bomOverlay"><div class="card" id="bomCard"></div></div>
+
+<div class="overlay" id="overlay"><div class="box"><div class="spin"></div><h2>Commissioning Line</h2><p id="ovText">Initializing stations…</p></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+const overlay=document.getElementById('overlay'), ovText=document.getElementById('ovText');
+function fail(m){ overlay.style.display='grid'; overlay.querySelector('.spin').style.display='none'; overlay.querySelector('h2').textContent='Unable to start'; ovText.textContent=m; }
+if(typeof THREE==='undefined'){ fail('Could not load the 3D engine.'); return; }
+try{ const tc=document.createElement('canvas'); if(!(tc.getContext('webgl')||tc.getContext('experimental-webgl'))) throw 0; }catch(e){ fail('WebGL is not available.'); return; }
+const T=THREE;
+
+// ===================== RENDERER / SCENE =====================
+const app=document.getElementById('app');
+const scene=new T.Scene(); scene.fog=new T.Fog(0x0a0c10, 520, 1400);
+const camera=new T.PerspectiveCamera(46, innerWidth/innerHeight, 0.5, 6000);
+const renderer=new T.WebGLRenderer({antialias:true, preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=T.PCFSoftShadowMap;
+renderer.outputEncoding=T.sRGBEncoding; renderer.toneMapping=T.ACESFilmicToneMapping; renderer.toneMappingExposure=1.18;
+renderer.localClippingEnabled=true; app.appendChild(renderer.domElement);
+
+(function(){ const c=document.createElement('canvas');c.width=4;c.height=512;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,512);g.addColorStop(0,'#11151c');g.addColorStop(0.55,'#0a0c10');g.addColorStop(1,'#06070a');
+  x.fillStyle=g;x.fillRect(0,0,4,512);const t=new T.CanvasTexture(c);t.encoding=T.sRGBEncoding;scene.background=t;})();
+let ENV=null;
+(function(){ try{ const p=new T.PMREMGenerator(renderer);const c=document.createElement('canvas');c.width=8;c.height=256;const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,256);g.addColorStop(0,'#7d8aa6');g.addColorStop(0.5,'#2a3140');g.addColorStop(1,'#0c0e12');
+  x.fillStyle=g;x.fillRect(0,0,8,256);const t=new T.CanvasTexture(c);t.mapping=T.EquirectangularReflectionMapping;
+  ENV=p.fromEquirectangular(t).texture; scene.environment=ENV; t.dispose();p.dispose(); }catch(e){} })();
+
+// ===================== LIGHTS =====================
+scene.add(new T.HemisphereLight(0xbcc8dc,0x0c0e12,0.75));
+const key=new T.DirectionalLight(0xffffff,1.05); key.position.set(180,300,160); key.castShadow=true;
+key.shadow.mapSize.set(2048,2048); const sh=420,sc=key.shadow.camera; sc.left=-sh;sc.right=sh;sc.top=sh;sc.bottom=-sh;sc.near=20;sc.far=1100;
+key.shadow.bias=-0.0004; key.shadow.normalBias=0.7; scene.add(key);
+const fill=new T.DirectionalLight(0x6f8bd0,0.3); fill.position.set(-180,120,-160); scene.add(fill);
+const rim=new T.DirectionalLight(0xffd0a0,0.55); rim.position.set(80,90,-240); scene.add(rim);
+
+// ===================== PROCEDURAL TEXTURES =====================
+function tex(draw,w,h,rx,ry,enc){ w=w||256;h=h||256; const c=document.createElement('canvas');c.width=w;c.height=h;
+  draw(c.getContext('2d'),w,h); const t=new T.CanvasTexture(c); t.wrapS=t.wrapT=T.RepeatWrapping; if(rx||ry)t.repeat.set(rx||1,ry||1);
+  t.anisotropy=4; if(enc)t.encoding=T.sRGBEncoding; return t; }
+function noise(x,w,h,base,amt,a){ x.fillStyle=base;x.fillRect(0,0,w,h); for(let i=0;i<w*h*0.12;i++){ const px=Math.random()*w,py=Math.random()*h;
+  const v=(Math.random()-0.5)*amt; x.fillStyle='rgba('+(v>0?255:0)+','+(v>0?255:0)+','+(v>0?255:0)+','+(Math.abs(v)/255*(a||0.5))+')'; x.fillRect(px,py,1.4,1.4); } }
+// brushed aluminium (horizontal grain)
+const txAlu=tex((x,w,h)=>{ noise(x,w,h,'#9aa1ab',60,0.25);
+  for(let i=0;i<420;i++){ const y=Math.random()*h; x.strokeStyle='rgba(255,255,255,'+(Math.random()*0.05)+')'; x.beginPath();x.moveTo(0,y);x.lineTo(w,y);x.stroke();
+    x.strokeStyle='rgba(0,0,0,'+(Math.random()*0.05)+')'; x.beginPath();x.moveTo(0,y+0.5);x.lineTo(w,y+0.5);x.stroke(); }},256,256,1,1,true);
+// black anodized extrusion side with T-slot channel
+function txExtrusion(rep){ return tex((x,w,h)=>{ noise(x,w,h,'#2a2f38',26,0.3);
+  // bevels at edges + central slot
+  x.fillStyle='#1b1f27'; x.fillRect(0,0,w,4); x.fillRect(0,h-4,w,4);
+  x.fillStyle='#10131a'; x.fillRect(0,h*0.5-9,w,18);                 // slot channel
+  x.fillStyle='#3a4150'; x.fillRect(0,h*0.5-11,w,2); x.fillRect(0,h*0.5+9,w,2);
+  x.fillStyle='rgba(255,255,255,0.04)'; x.fillRect(0,6,w,2); },128,128,rep||1,1,true); }
+const txExtr=txExtrusion(1);
+// black steel / motor body
+const txSteel=tex((x,w,h)=>{ noise(x,w,h,'#1a1d23',30,0.4);
+  for(let i=0;i<120;i++){const y=Math.random()*h;x.strokeStyle='rgba(255,255,255,'+(Math.random()*0.03)+')';x.beginPath();x.moveTo(0,y);x.lineTo(w,y);x.stroke();}},256,256,1,1,true);
+// knurled grip
+const txKnurl=tex((x,w,h)=>{ x.fillStyle='#8b929c';x.fillRect(0,0,w,h); x.strokeStyle='rgba(0,0,0,0.5)';x.lineWidth=1.4;
+  for(let i=-h;i<w;i+=8){x.beginPath();x.moveTo(i,0);x.lineTo(i+h,h);x.stroke();x.beginPath();x.moveTo(i,h);x.lineTo(i+h,0);x.stroke();}},128,128,3,1,true);
+// copper magnet-wire winding
+function txCopper(hex){ return tex((x,w,h)=>{ x.fillStyle=hex||'#c8742a';x.fillRect(0,0,w,h);
+  for(let i=0;i<h;i+=3){ x.strokeStyle='rgba(0,0,0,0.22)';x.beginPath();x.moveTo(0,i);x.lineTo(w,i);x.stroke();
+    x.strokeStyle='rgba(255,235,200,0.18)';x.beginPath();x.moveTo(0,i+1.2);x.lineTo(w,i+1.2);x.stroke(); }},128,128,1,1,true); }
+// matte rubber (belt)
+const txRubber=tex((x,w,h)=>{ noise(x,w,h,'#15171c',18,0.4);
+  for(let i=0;i<w;i+=4){x.fillStyle='rgba(0,0,0,0.4)';x.fillRect(i,0,2,h);} },64,64,1,4);
+// 3D-printed nylon bobbin (layer lines)
+const txPrint=tex((x,w,h)=>{ x.fillStyle='#20242c';x.fillRect(0,0,w,h);
+  for(let i=0;i<h;i+=4){x.fillStyle='rgba(255,255,255,0.04)';x.fillRect(0,i,w,1);x.fillStyle='rgba(0,0,0,0.18)';x.fillRect(0,i+2,w,1);} },128,128,1,3,true);
+// concrete factory floor
+const txFloor=tex((x,w,h)=>{ noise(x,w,h,'#1b1e24',40,0.5);
+  for(let i=0;i<60;i++){x.strokeStyle='rgba(0,0,0,'+(Math.random()*0.15)+')';x.lineWidth=Math.random()*2;x.beginPath();const sx=Math.random()*w,sy=Math.random()*h;x.moveTo(sx,sy);x.lineTo(sx+(Math.random()-0.5)*60,sy+(Math.random()-0.5)*60);x.stroke();}
+  x.strokeStyle='rgba(0,0,0,0.4)';x.lineWidth=3; x.strokeRect(0,0,w,h); },512,512,8,8,true);
+
+// ===================== MATERIALS =====================
+const M={
+  alu:   new T.MeshStandardMaterial({map:txAlu,color:0xb9c0ca,roughness:0.42,metalness:0.92,envMapIntensity:1.1}),
+  extr:  new T.MeshStandardMaterial({map:txExtr,color:0x39404c,roughness:0.55,metalness:0.7,envMapIntensity:0.9}),
+  steel: new T.MeshStandardMaterial({map:txSteel,color:0x2a2f38,roughness:0.45,metalness:0.92,envMapIntensity:1.0}),
+  bright:new T.MeshStandardMaterial({color:0xc7ced9,roughness:0.18,metalness:1.0,envMapIntensity:1.25}),
+  knurl: new T.MeshStandardMaterial({map:txKnurl,color:0x9aa1ab,roughness:0.4,metalness:0.95,envMapIntensity:1.1}),
+  motor: new T.MeshStandardMaterial({map:txSteel,color:0x15171c,roughness:0.5,metalness:0.55}),
+  cap:   new T.MeshStandardMaterial({color:0x0c0d10,roughness:0.7,metalness:0.3}),
+  rubber:new T.MeshStandardMaterial({map:txRubber,color:0x101216,roughness:0.85,metalness:0.1}),
+  print: new T.MeshStandardMaterial({map:txPrint,color:0x222831,roughness:0.7,metalness:0.15})
+};
+M.brass=new T.MeshStandardMaterial({color:0xb8893a,roughness:0.4,metalness:0.85,envMapIntensity:1.1});
+M.box  =new T.MeshStandardMaterial({color:0x14181f,roughness:0.6,metalness:0.4});
+const floorMat=new T.MeshStandardMaterial({map:txFloor,color:0x33383f,roughness:0.92,metalness:0.05});
+
+// ===================== FLOOR + AMBIENCE =====================
+const floor=new T.Mesh(new T.PlaneGeometry(4000,4000),floorMat); floor.rotation.x=-Math.PI/2; floor.position.y=-0.5; floor.receiveShadow=true; scene.add(floor);
+// safety lane stripes + overhead light trusses added in layoutFloor()
+const ambient=new T.Group(); scene.add(ambient);
+function layoutFloor(n,spacing){
+  while(ambient.children.length){ const c=ambient.children.pop(); if(c.geometry)c.geometry.dispose(); ambient.remove(c); }
+  const len=Math.max(1,n)*spacing+260;
+  // yellow safety lanes either side of the line
+  const lane=new T.MeshStandardMaterial({color:0xb8932a,roughness:0.8,metalness:0.1,emissive:0x1a1505,emissiveIntensity:0.4});
+  [-95,95].forEach(x=>{ const s=new T.Mesh(new T.BoxGeometry(4,0.4,len),lane); s.position.set(x,0,(n-1)*spacing/2); ambient.add(s); });
+  // overhead light trusses
+  for(let i=0;i<n;i++){ const z=i*spacing;
+    const truss=new T.Mesh(new T.BoxGeometry(170,5,8),M.extr); truss.position.set(0,170,z); ambient.add(truss);
+    [-70,70].forEach(x=>{ const col=new T.Mesh(new T.BoxGeometry(5,170,5),M.extr); col.position.set(x,85,z-90); ambient.add(col); });
+    const pan=new T.Mesh(new T.BoxGeometry(150,2,6),new T.MeshStandardMaterial({color:0xdfe7f0,emissive:0xeaf2ff,emissiveIntensity:0.8}));
+    pan.position.set(0,167,z); ambient.add(pan);
+    const pl=new T.PointLight(0xeaf2ff,0.5,260,2); pl.position.set(0,160,z); ambient.add(pl);
+  }
+}
+
+// ===================== REAL-PART BUILDERS =====================
+function mesh(geo,mat,x,y,z,parent){ const m=new T.Mesh(geo,mat); m.position.set(x||0,y||0,z||0); m.castShadow=true; m.receiveShadow=true; if(parent)parent.add(m); return m; }
+// aluminium extrusion beam (length along axis 'X','Y' or 'Z')
+function beam(len,sz,axis,mat,x,y,z,parent){ const g=new T.BoxGeometry(axis==='X'?len:sz, axis==='Y'?len:sz, axis==='Z'?len:sz);
+  return mesh(g,mat||M.extr,x,y,z,parent); }
+// NEMA stepper motor (recognisable: body + 4 tie rods + boss + shaft), axis along +X out of front face
+function stepper(frame, shaftLen, parent){ const g=new T.Group();
+  const L=frame*1.1;
+  const body=mesh(new T.BoxGeometry(L,frame,frame),M.motor,0,0,0,g);
+  // chamfered look via dark caps
+  mesh(new T.BoxGeometry(2,frame*0.86,frame*0.86),M.cap,L/2-1,0,0,g);
+  mesh(new T.BoxGeometry(2,frame*0.86,frame*0.86),M.cap,-L/2+1,0,0,g);
+  const r=frame*0.42;
+  [[r,r],[r,-r],[-r,r],[-r,-r]].forEach(p=>{ const rod=mesh(new T.CylinderGeometry(1.1,1.1,L,10),M.bright,0,p[0],p[1],g); rod.rotation.z=Math.PI/2; });
+  mesh(new T.CylinderGeometry(frame*0.28,frame*0.28,3,24),M.bright,L/2+1.5,0,0,g).rotation.z=Math.PI/2; // front boss
+  const shaft=mesh(new T.CylinderGeometry(2.4,2.4,shaftLen,16),M.bright,L/2+3+shaftLen/2,0,0,g); shaft.rotation.z=Math.PI/2;
+  if(parent)parent.add(g); g.userData.L=L; return g;
+}
+// 3-jaw self-centring chuck
+function chuck3(coreR,parent){ const g=new T.Group();
+  mesh(new T.CylinderGeometry(coreR+9,coreR+9,9,40),M.knurl,0,0,0,g).rotation.z=Math.PI/2;            // body
+  mesh(new T.CylinderGeometry(coreR+9.2,coreR+9.2,1.5,40),M.steel,4.6,0,0,g).rotation.z=Math.PI/2;    // face plate ring
+  for(let k=0;k<3;k++){ const a=k/3*Math.PI*2; const j=mesh(new T.BoxGeometry(5,5,11),M.bright,5,Math.sin(a)*(coreR+3),Math.cos(a)*(coreR+3),g); j.rotation.x=-a; }
+  if(parent)parent.add(g); return g;
+}
+// MGN linear rail + carriage
+function makeRail(len,parent){ const g=new T.Group();
+  const rail=mesh(new T.BoxGeometry(len,5,7),M.bright,0,0,0,g);
+  mesh(new T.BoxGeometry(len,2,2),M.steel,0,3,0,g);
+  if(parent)parent.add(g); return g;
+}
+// 608 bearing ring
+function bearing(r,parent){ const b=mesh(new T.TorusGeometry(r,r*0.34,10,22),M.steel,0,0,0,parent); return b; }
+
+// ===================== DIMENSIONS / CONFIG =====================
+const AXIS_Y=52;           // coil axis height above floor (within station)
+const SPIN_DIR=-1;
+const SEG=36;
+const STATION_SP=150;      // spacing between stations along +Z
+let beadR=0.6;
+
+const PRESETS={ large:{coreR:20,width:18,awg:16,turns:26}, small:{coreR:9,width:11,awg:30,turns:96} };
+const PARAMS={coreR:20,width:18,awg:16,turns:26,mode:'helical',spacing:1.6,preset:'large'};
+function awgDia(n){ return 0.127*Math.pow(92,(36-n)/39); }
+function enamelBuild(d){ return Math.max(0.018, d*0.055); }          // single-build enamel approx (mm)
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+
+// --- core material (effective permeability with finite-rod demagnetizing correction) ---
+const CORES={ air:{name:'Air core',mu:1}, ferrite:{name:'Ferrite',mu:2000}, powder:{name:'Powdered iron',mu:75}, steel:{name:'Silicon steel',mu:4000} };
+let coreKey='air';
+const coreSlugMats={
+  ferrite:new T.MeshStandardMaterial({color:0x2c2f36,roughness:0.5,metalness:0.4,envMapIntensity:0.7}),
+  powder: new T.MeshStandardMaterial({color:0x4a3526,roughness:0.72,metalness:0.3}),
+  steel:  new T.MeshStandardMaterial({color:0x70777f,roughness:0.28,metalness:0.96,envMapIntensity:1.25}) };
+function demagFactor(m){ // axial demag factor of a finite rod, aspect m = length / diameter
+  function prolate(p){ if(Math.abs(p-1)<1e-6)return 1/3; const s=Math.sqrt(p*p-1); return (1/(p*p-1))*((p/s)*Math.log(p+s)-1); }
+  let N = (m>=1)? prolate(m) : (1-prolate(1/m))/2; return clamp(N,1e-4,0.999); }
+function effPerm(mu,m){ if(mu<=1)return 1; return clamp(mu/(1+demagFactor(m)*(mu-1)),1,mu); }
+
+// --- factory / job-shop state ---
+let jobShop=false;
+function jobVariant(i){ // radial-only variation so the machine (axial layout) stays identical across the line
+  const base=planCoil(PARAMS);
+  const turnsArr=[PARAMS.turns, Math.round(PARAMS.turns*1.6), Math.max(6,Math.round(PARAMS.turns*0.6)), Math.round(PARAMS.turns*1.25)];
+  const awgArr=[PARAMS.awg, PARAMS.awg+4, Math.max(12,PARAMS.awg-2), PARAMS.awg+2];
+  const modeArr=['helical','orthocyclic','helical','spaced'];
+  const coreArr=[PARAMS.coreR, Math.max(6,PARAMS.coreR-5), PARAMS.coreR+4, PARAMS.coreR];
+  const k=i%4;
+  return planCoil({coreR:coreArr[k], width:PARAMS.width, awg:clamp(awgArr[k],12,40), turns:Math.max(1,turnsArr[k]), mode:modeArr[k], spacing:PARAMS.spacing});
+}
+function planCoil(p){ const copperDia=awgDia(p.awg), ins=enamelBuild(copperDia), wireOD=copperDia+2*ins;
+  const wire=copperDia/2, copperArea=Math.PI*wire*wire;                // mm^2 (bare copper, for resistance)
+  const dia=wireOD, wc=wireOD/2;                                       // insulated OD drives geometry
+  const pitch=(p.mode==='spaced')?dia*p.spacing:dia*1.015;
+  const tpl=Math.max(1,Math.floor(p.width/pitch));
+  const rs=(p.mode==='orthocyclic')?dia*0.8660254:dia;
+  const ax=(p.mode==='orthocyclic')?pitch/2:0;
+  const layers=Math.max(1,Math.ceil(p.turns/tpl));
+  const last=p.turns-(layers-1)*tpl, outerR=p.coreR+wc+(layers-1)*rs+wc;
+  const coreLen=p.width+2*p.coreR, muEff=effPerm(CORES[coreKey].mu, coreLen/(2*p.coreR));
+  return {coreR:p.coreR,width:p.width,awg:p.awg,mode:p.mode,spacing:p.spacing,copperDia,ins,wireOD,dia,wire,wc,copperArea,pitch,turnsPerLayer:tpl,radialStep:rs,axOffset:ax,layers,totalTurns:p.turns,lastTurns:last,fill:last/tpl,outerR,OD:2*outerR,coreLen,muEff}; }
+
+// ===================== COIL TOOLPATH (per-station data) =====================
+let PLAN=null, building=false;
+function buildCoil(plan){ const {coreR,wc,pitch,turnsPerLayer,radialStep,axOffset,totalTurns}=plan; const turns=[];
+  for(let g=0;g<totalTurns;g++){ const m=Math.floor(g/turnsPerLayer),pos=g-m*turnsPerLayer,dir=(m%2===0)?1:-1,Rm=coreR+wc+m*radialStep;
+    const baseT=(dir>0)?pos:(turnsPerLayer-1-pos),span=(turnsPerLayer-1)*pitch,xc=-span/2+baseT*pitch+(m%2?axOffset:0); const pts=[];
+    for(let a=0;a<=SEG;a++){ const f=a/SEG,gv=g+f,x=xc+dir*(f-0.5)*pitch,ang=Math.PI/2-SPIN_DIR*gv*2*Math.PI;
+      pts.push({x,y:Rm*Math.sin(ang),z:Rm*Math.cos(ang)}); }
+    turns.push({pts,layer:m,R:Rm}); }
+  return turns; }
+function perimeter(pts){ let s=0; for(let i=0;i<pts.length-1;i++){const a=pts[i],b=pts[i+1];s+=Math.hypot(b.x-a.x,b.y-a.y,b.z-a.z);} return s; }
+function tubeArrays(pts,r){ const radius=r||beadR; const v=pts.map(p=>new T.Vector3(p.x,p.y,p.z));
+  const curve=new T.CatmullRomCurve3(v,false,'catmullrom',0.5);
+  const geo=new T.TubeGeometry(curve,Math.max(8,pts.length),radius,7,false).toNonIndexed();
+  const pos=geo.attributes.position.array.slice(), nor=geo.attributes.normal.array.slice(); geo.dispose(); return {pos,nor}; }
+function buildCoilData(plan){ const model=buildCoil(plan), n=model.length, r=plan.dia/2;
+  const cache=new Array(n),perims=new Array(n),cumPerim=new Array(n+1); cumPerim[0]=0;
+  for(let i=0;i<n;i++){ cache[i]=tubeArrays(model[i].pts,r); perims[i]=perimeter(model[i].pts); cumPerim[i+1]=cumPerim[i]+perims[i]; }
+  let req=0; for(let m=0;m<plan.layers;m++) req+=plan.turnsPerLayer*2*Math.PI*(plan.coreR+plan.wc+m*plan.radialStep);
+  return {plan,model,cache,perims,cumPerim,totalLen:cumPerim[n],capacity:Math.max(req*1.7,4000)}; }
+
+// ===================== WIRE / COIL MATERIALS =====================
+const wireColor=new T.Color('#c8742a');
+let rainbow=false;
+const solidMat=new T.MeshStandardMaterial({vertexColors:true,color:0xffffff,roughness:0.28,metalness:0.92,envMapIntensity:1.25,clippingPlanes:[]});
+const clipPlane=new T.Plane(new T.Vector3(1,0,0),9999); let clipping=false;
+function layerColorFor(layer,L){ if(rainbow){ const t=L>1?layer/(L-1):0; return new T.Color().setHSL(0.07+0.5*t,0.7,0.5);} return wireColor; }
+
+// ===================== STATION (instanced static machine + dynamic assembly) =====================
+const stationsGroup=new T.Group(); scene.add(stationsGroup);
+const staticGroup=new T.Group(); scene.add(staticGroup);
+let STATIONS=[]; let focusIdx=0; let staticInstanced=[];
+
+// fixed-size machine (axial layout identical across the line) so static parts can be instanced
+function staticTemplate(W){
+  const g=new T.Group(); const GY=AXIS_Y+30;
+  beam(150,8,'X',M.extr,0,8,30,g); beam(150,8,'X',M.extr,0,8,-34,g);
+  beam(64,8,'Z',M.extr,-70,8,-2,g); beam(64,8,'Z',M.extr,70,8,-2,g);
+  beam(GY+8,8,'Y',M.extr,-70,(GY+8)/2+8,-34,g); beam(GY+8,8,'Y',M.extr,70,(GY+8)/2+8,-34,g);
+  beam(150,8,'X',M.extr,0,GY+12,-34,g);
+  mesh(new T.BoxGeometry(8,46,46),M.alu,-(W/2+30),AXIS_Y,0,g);                              // headstock plate
+  const sp=stepper(57,10,g); sp.position.set(-(W/2+30)-29,AXIS_Y,0);                        // NEMA23 spindle
+  mesh(new T.CylinderGeometry(4.5,4.5,8,16),M.box,-(W/2+30)+6,AXIS_Y,0,g).rotation.z=Math.PI/2; // coupling
+  mesh(new T.BoxGeometry(8,40,40),M.alu,(W/2+30),AXIS_Y,0,g);                                // tailstock plate
+  mesh(new T.CylinderGeometry(3.5,3.5,18,16),M.bright,(W/2+22),AXIS_Y,0,g).rotation.z=Math.PI/2;   // quill
+  mesh(new T.CylinderGeometry(0.2,4,9,16),M.bright,(W/2+13),AXIS_Y,0,g).rotation.z=-Math.PI/2;     // live center
+  makeRail(150,g).position.set(0,18,40);
+  const tm=stepper(42,8,g); tm.position.set(-92,18,40);                                     // NEMA17 traverse
+  mesh(new T.CylinderGeometry(2.2,2.2,150,16),M.bright,0,18,32,g).rotation.z=Math.PI/2;     // T8 leadscrew
+  const SX=-108,SY=AXIS_Y+52,SZ=-40;
+  beam(SY-8,8,'Y',M.extr,SX,(8+SY)/2,SZ-30,g); beam(40,8,'Z',M.extr,SX,SY,SZ-14,g);         // spool bracket
+  beam(34,4,'Y',M.alu,-50,AXIS_Y+20,-22,g);
+  mesh(new T.TorusGeometry(5,1.6,10,24),M.steel,-50,AXIS_Y+36,-22,g).rotation.y=Math.PI/2;  // tensioner
+  mesh(new T.BoxGeometry(26,30,12),M.box,70,28,30,g);                                        // control box
+  for(let i=0;i<5;i++) mesh(new T.BoxGeometry(20,1.2,1),M.cap,70,22+i*3,36,g);
+  mesh(new T.BoxGeometry(14,8,0.6),new T.MeshStandardMaterial({color:0x06181a,emissive:0x0a3b3a,emissiveIntensity:0.5}),74,38,36.6,g);
+  return g;
+}
+function buildStaticInstances(n,W){
+  staticInstanced.forEach(im=>{ staticGroup.remove(im); im.geometry.dispose(); }); staticInstanced=[];
+  const tpl=staticTemplate(W); tpl.updateMatrixWorld(true);
+  const parts=[]; tpl.traverse(o=>{ if(o.isMesh) parts.push({geo:o.geometry,mat:o.material,m:o.matrixWorld.clone()}); });
+  const off=new T.Matrix4(),tmp=new T.Matrix4();
+  parts.forEach(p=>{ const im=new T.InstancedMesh(p.geo,p.mat,n); im.castShadow=true; im.receiveShadow=true; im.frustumCulled=false;
+    for(let i=0;i<n;i++){ off.makeTranslation(0,0,i*STATION_SP); tmp.multiplyMatrices(off,p.m); im.setMatrixAt(i,tmp); }
+    im.instanceMatrix.needsUpdate=true; staticGroup.add(im); staticInstanced.push(im); });
+}
+function buildDynamic(data,i){
+  const plan=data.plan, g=new T.Group(); g.position.set(0,0,i*STATION_SP);
+  const width=plan.width, coreR=plan.coreR, flR=plan.outerR+6, GY=AXIS_Y+30;
+  const SX=-108,SY=AXIS_Y+52,SZ=-40, RF=22, WW=13;
+  // carriage (traverses in X)
+  const carriage=new T.Group(); g.add(carriage);
+  mesh(new T.BoxGeometry(20,12,26),M.steel,0,18,38,carriage); mesh(new T.BoxGeometry(10,8,8),M.brass,0,18,32,carriage);
+  beam(GY-18,5,'Y',M.alu,0,(18+GY)/2,40,carriage); beam(40,5,'Z',M.alu,0,GY,21,carriage);
+  const eyelet=mesh(new T.TorusGeometry(3,1,10,20),M.bright,0,GY,0,carriage); eyelet.rotation.y=Math.PI/2;
+  // supply spool (rotates + depletes)
+  const spool=new T.Group(); spool.position.set(SX,SY,SZ); g.add(spool);
+  mesh(new T.CylinderGeometry(2.4,2.4,28,16),M.bright,0,0,-10,spool).rotation.x=Math.PI/2; bearing(4,spool).rotation.x=Math.PI/2;
+  const spoolWind=mesh(new T.CylinderGeometry(RF,RF,WW,40),new T.MeshStandardMaterial({map:txCopper('#'+wireColor.getHexString()),color:wireColor.clone(),roughness:0.42,metalness:0.85,envMapIntensity:1.1}),0,0,0,spool); spoolWind.rotation.x=Math.PI/2;
+  [WW/2+1.6,-WW/2-1.6].forEach(z=>mesh(new T.CylinderGeometry(26,26,3,40),M.box,0,0,z,spool).rotation.x=Math.PI/2);
+  // feed wire
+  const FEEDN=10, feedGeo=new T.BufferGeometry(); feedGeo.setAttribute('position',new T.Float32BufferAttribute(new Float32Array(FEEDN*3),3));
+  const feedLine=new T.Line(feedGeo,new T.LineBasicMaterial({color:wireColor.clone()})); g.add(feedLine);
+  // status LED
+  const ledMat=new T.MeshStandardMaterial({color:0x0a2,emissive:0x2c7,emissiveIntensity:0.8});
+  mesh(new T.SphereGeometry(1.6,12,12),ledMat,62,40,37,g);
+  // spinning spindle: arbor + chuck + bobbin + flanges + core slug + coil
+  const spindle=new T.Group(); spindle.position.set(0,AXIS_Y,0); g.add(spindle);
+  mesh(new T.CylinderGeometry(3.2,3.2,width+90,20),M.bright,0,0,0,spindle).rotation.z=Math.PI/2;
+  chuck3(coreR,spindle).position.x=-(width/2+11);
+  const bob=mesh(new T.CylinderGeometry(coreR,coreR,width,40),M.print.clone(),0,0,0,spindle); bob.rotation.z=Math.PI/2;
+  const flMat=M.print.clone();
+  mesh(new T.CylinderGeometry(flR,flR,3,44),flMat,-(width/2+1.5),0,0,spindle).rotation.z=Math.PI/2;
+  mesh(new T.CylinderGeometry(flR,flR,3,44),flMat,(width/2+1.5),0,0,spindle).rotation.z=Math.PI/2;
+  const coreSlug=mesh(new T.CylinderGeometry(coreR*0.86,coreR*0.86,plan.coreLen,32),(coreSlugMats[coreKey]||coreSlugMats.steel),0,0,0,spindle); coreSlug.rotation.z=Math.PI/2; coreSlug.visible=(coreKey!=='air');
+  const coilGroup=new T.Group(); spindle.add(coilGroup);
+  // fixed (non-spinning) subgroup for field viz
+  const fixed=new T.Group(); fixed.position.set(0,AXIS_Y,0); g.add(fixed);
+  const glow=new T.Sprite(new T.SpriteMaterial({map:glowTex,blending:T.AdditiveBlending,depthWrite:false,opacity:0})); glow.scale.set(8,8,1); g.add(glow);
+  const cl=new T.PointLight(0xffb070,0,40,2); g.add(cl);
+  // invisible pick target for click-to-focus
+  const pick=new T.Mesh(new T.BoxGeometry(170,GY+70,130),new T.MeshBasicMaterial({colorWrite:false,depthWrite:false})); pick.position.set(0,(GY+70)/2-6,0); pick.userData.idx=i; g.add(pick);
+  stationsGroup.add(g);
+  return Object.assign({ group:g, spindle, coilGroup, carriage, eyelet, spool, spoolWind, bob, coreSlug, ledMat, glow, cl, fixed, RF, WW, SX,SY,SZ, GY, flMat, feedGeo, feedLine, pick,
+    layerIdx:0, segF:0, woundRev:0, phase:'idle', printedLen:0, elapsed:0, rpm:0,
+    solidMesh:null, partialMesh:null, homeT:0, startDelay:0, ejectT:0, completed:0,
+    tempC:AMBIENT, _prevRpm:0, _jit:Math.random()*6.28, phys:null,
+    fieldBuilt:false, fieldLines:[], fluxParticles:[], fieldArrow:null, poleN:null, poleS:null }, data);
+}
+
+// contact glow texture (shared)
+const glowTex=(function(){ const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
+  const g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'rgba(255,210,150,1)');g.addColorStop(0.35,'rgba(255,150,70,0.6)');g.addColorStop(1,'rgba(255,120,50,0)');
+  x.fillStyle=g;x.fillRect(0,0,64,64);return new T.CanvasTexture(c);})();
+const partTex=(function(){ const c=document.createElement('canvas');c.width=c.height=48;const x=c.getContext('2d');
+  const g=x.createRadialGradient(24,24,0,24,24,24);g.addColorStop(0,'rgba(190,240,255,1)');g.addColorStop(0.4,'rgba(80,200,255,0.7)');g.addColorStop(1,'rgba(40,160,255,0)');
+  x.fillStyle=g;x.fillRect(0,0,48,48);return new T.CanvasTexture(c);})();
+
+// ===================== PER-STATION COIL MESH =====================
+function disposeMesh(group,m){ if(!m)return; group.remove(m); if(m.geometry)m.geometry.dispose(); }
+function setSolid(st,count){ disposeMesh(st.coilGroup,st.solidMesh); st.solidMesh=null; if(count<=0)return;
+  let total=0; for(let i=0;i<count;i++) total+=st.cache[i].pos.length;
+  const pos=new Float32Array(total),nor=new Float32Array(total),col=new Float32Array(total); let o=0; const L=st.plan.layers;
+  for(let i=0;i<count;i++){ const c=st.cache[i], lc=layerColorFor(st.model[i].layer,L), len=c.pos.length; pos.set(c.pos,o); nor.set(c.nor,o);
+    for(let k=0;k<len;k+=3){col[o+k]=lc.r;col[o+k+1]=lc.g;col[o+k+2]=lc.b;} o+=len; }
+  const gg=new T.BufferGeometry(); gg.setAttribute('position',new T.BufferAttribute(pos,3)); gg.setAttribute('normal',new T.BufferAttribute(nor,3)); gg.setAttribute('color',new T.BufferAttribute(col,3));
+  solidMat.clippingPlanes=clipping?[clipPlane]:[];
+  st.solidMesh=new T.Mesh(gg,solidMat); st.solidMesh.castShadow=true; st.coilGroup.add(st.solidMesh); }
+function clearCoil(st){ disposeMesh(st.coilGroup,st.solidMesh); st.solidMesh=null; disposeMesh(st.coilGroup,st.partialMesh); st.partialMesh=null; }
+
+// ===================== FIELD (focused station only) =====================
+const fieldMat=new T.LineBasicMaterial({color:0x4fc8ff,transparent:true,opacity:0,blending:T.AdditiveBlending,depthWrite:false});
+let energized=false, fieldVis=0;
+function clearField(st){ st.fieldLines.forEach(l=>{st.fixed.remove(l);l.geometry.dispose();}); st.fieldLines=[];
+  st.fluxParticles.forEach(p=>st.fixed.remove(p.sprite)); st.fluxParticles=[];
+  if(st.fieldArrow){st.fixed.remove(st.fieldArrow);st.fieldArrow=null;} if(st.poleN){st.fixed.remove(st.poleN,st.poleS);st.poleN=st.poleS=null;} st.fieldBuilt=false; }
+function buildField(st){ clearField(st); const coreR=st.plan.coreR,layers=st.plan.layers,dia=st.plan.dia,xend=st.plan.width/2,od=coreR+layers*dia;
+  for(let k=0;k<4;k++){ const fk=k/3, rin=coreR*0.3+fk*coreR*0.55, rout=od+9+k*12, xo=xend+8+k*7;
+    const ctrl=[[-xend*0.96,rin],[xend*0.96,rin],[xo,rout*0.55],[0,rout],[-xo,rout*0.55]].map(p=>new T.Vector3(p[0],p[1],0));
+    const base=new T.CatmullRomCurve3(ctrl,true,'catmullrom',0.5).getPoints(64);
+    for(let a=0;a<8;a++){ const ph=a/8*Math.PI*2,c=Math.cos(ph),s=Math.sin(ph); const pts=base.map(b=>new T.Vector3(b.x,b.y*c,b.y*s));
+      const line=new T.Line(new T.BufferGeometry().setFromPoints(pts),fieldMat); st.fixed.add(line); st.fieldLines.push(line);
+      if(k===1&&a%2===0){ const sp=new T.Sprite(new T.SpriteMaterial({map:partTex,blending:T.AdditiveBlending,depthWrite:false,opacity:0,transparent:true})); sp.scale.set(5,5,1); st.fixed.add(sp); st.fluxParticles.push({pts,t:Math.random(),sprite:sp}); } } }
+  st.fieldArrow=new T.Mesh(new T.ConeGeometry(3,9,18),new T.MeshStandardMaterial({color:0x4fc8ff,emissive:0x2fa0e0,emissiveIntensity:1,transparent:true,opacity:0})); st.fieldArrow.rotation.z=-Math.PI/2; st.fixed.add(st.fieldArrow);
+  function pole(col){ return new T.Sprite(new T.SpriteMaterial({map:glowTex,color:col,blending:T.AdditiveBlending,depthWrite:false,opacity:0})); }
+  st.poleN=pole(0xff6a4a); st.poleS=pole(0x4f8aff); st.poleN.scale.set(14,14,1); st.poleS.scale.set(14,14,1);
+  st.poleN.position.set(xend+10,0,0); st.poleS.position.set(-xend-10,0,0); st.fixed.add(st.poleN,st.poleS); st.fieldBuilt=true; }
+
+// ===================== FACTORY CONTROL =====================
+let running=false, stationN=4, autoRecycle=true;
+function spoolRadius(st){ const remain=Math.max(0,1-st.printedLen/st.capacity); return 6+(st.RF-6)*Math.sqrt(remain); }
+function updateFeed(st,speed){
+  const ax=st.carriage.position.x;
+  const R=(st.layerIdx<st.model.length?st.model[st.layerIdx].R:(st.model.length?st.model[st.model.length-1].R:st.plan.coreR));
+  const spoolExit=new T.Vector3(st.SX, st.SY+spoolRadius(st), st.SZ);
+  const tensP=new T.Vector3(-50, AXIS_Y+36, -22);
+  const eye=new T.Vector3(ax, st.GY, 0);
+  const contact=new T.Vector3(ax, AXIS_Y+R, 0);
+  const active=(st.phase==='winding'||st.phase==='homing'); const slack=active?(1-Math.min(1,speed/8)):1;
+  const p=st.feedGeo.attributes.position.array; let w=0;
+  function span(A,B,n,sag){ for(let i=(w===0?0:1);i<=n;i++){ const t=i/n;
+    p[w*3]=A.x+(B.x-A.x)*t; p[w*3+1]=A.y+(B.y-A.y)*t - sag*slack*4*t*(1-t); p[w*3+2]=A.z+(B.z-A.z)*t; w++; } }
+  span(spoolExit,tensP,4,6); span(tensP,eye,4,3); span(eye,contact,1,0);
+  st.feedGeo.attributes.position.needsUpdate=true;
+}
+function resetStation(st){ clearCoil(st); st.layerIdx=0; st.segF=0; st.woundRev=0; st.printedLen=0; st.elapsed=0; st.rpm=0; st.homeT=0; st.ejectT=0; st.tempC=AMBIENT; st._prevRpm=0;
+  st.phase='idle'; st.spindle.rotation.x=0; st.carriage.position.x=-st.plan.width/2; }
+function parkDone(st){ st.carriage.position.x=st.plan.width/2+2; }
+
+function stepStation(st,dt,speed){
+  if(st.phase==='idle'){ if(running && st.startDelay<=0) st.phase='homing'; else if(running) st.startDelay-=dt; return; }
+  if(st.phase==='homing'){ st.homeT+=dt; const a=Math.min(1,st.homeT/0.6),e=a*a*(3-2*a); const tn=st.model[0];
+    st.carriage.position.x=(-st.plan.width/2-10)*(1-e)+tn.pts[0].x*e; st.spindle.rotation.x+=SPIN_DIR*speed*0.4*Math.PI*2*dt; st.rpm=speed*60*e;
+    if(a>=1) st.phase='winding'; return; }
+  if(st.phase==='done'){ if(autoRecycle && running){ st.ejectT+=dt; if(st.ejectT>1.1){ resetStation(st); st.phase='homing'; } } return; }
+  if(st.phase!=='winding') return;
+  if(!running){ return; }
+  const tn=st.model[st.layerIdx], n=tn.pts.length; st.elapsed+=dt; st.rpm=speed*60; st.segF+=SEG*speed*dt;
+  const upto=Math.min(n,Math.floor(st.segF)), frac=st.segF-Math.floor(st.segF); const sub=tn.pts.slice(0,upto); let hx;
+  if(upto<n){ const a=tn.pts[Math.max(0,upto-1)],b=tn.pts[Math.min(upto,n-1)]; hx=a.x+(b.x-a.x)*frac; sub.push({x:hx,y:a.y+(b.y-a.y)*frac,z:a.z+(b.z-a.z)*frac}); }
+  else hx=tn.pts[n-1].x;
+  st.woundRev=st.layerIdx+Math.min(1,st.segF/SEG); st.spindle.rotation.x=SPIN_DIR*st.woundRev*2*Math.PI; st.carriage.position.x=hx;
+  disposeMesh(st.coilGroup,st.partialMesh); st.partialMesh=null;
+  if(sub.length>=2){ const arr=tubeArrays(sub,st.plan.dia/2); const gg=new T.BufferGeometry();
+    gg.setAttribute('position',new T.BufferAttribute(arr.pos,3)); gg.setAttribute('normal',new T.BufferAttribute(arr.nor,3));
+    const lc=layerColorFor(tn.layer,st.plan.layers);
+    const m=new T.MeshStandardMaterial({color:lc,roughness:0.28,metalness:0.92,envMapIntensity:1.25,emissive:lc.clone().multiplyScalar(0.1),clippingPlanes:clipping?[clipPlane]:[]});
+    st.partialMesh=new T.Mesh(gg,m); st.partialMesh.castShadow=true; st.coilGroup.add(st.partialMesh); }
+  st.printedLen=st.cumPerim[st.layerIdx]+st.perims[st.layerIdx]*Math.min(1,st.segF/n);
+  if(st.segF>=n){ st.layerIdx++; st.segF=0; setSolid(st,st.layerIdx); disposeMesh(st.coilGroup,st.partialMesh); st.partialMesh=null;
+    if(st.layerIdx>=st.model.length){ st.phase='done'; st.completed++; parkDone(st); } }
+}
+
+// ===================== BUILD / REBUILD =====================
+function clearStations(){ STATIONS.forEach(st=>{ clearCoil(st); clearField(st); stationsGroup.remove(st.group);
+  st.group.traverse(o=>{ if(o.geometry && !o.isInstancedMesh) o.geometry.dispose(); }); }); STATIONS=[]; }
+function rebuild(){
+  building=true; PLAN=planCoil(PARAMS); beadR=PLAN.dia/2;
+  overlay.style.display='grid'; overlay.querySelector('.spin').style.display='block'; overlay.querySelector('h2').textContent='Commissioning Line';
+  clearStations();
+  layoutFloor(stationN,STATION_SP);
+  scene.fog.far=Math.max(1400,(stationN-1)*STATION_SP+1250); scene.fog.near=Math.max(440,scene.fog.far*0.32);
+  buildStaticInstances(stationN, PARAMS.width);
+  for(let i=0;i<stationN;i++){ const data=buildCoilData(jobShop?jobVariant(i):planCoil(PARAMS)); const st=buildDynamic(data,i); st.startDelay=i*0.7; STATIONS.push(st); }
+  focusIdx=Math.min(focusIdx,stationN-1);
+  buildField(STATIONS[focusIdx]);
+  const cr=document.getElementById('clipR'); cr.min=(-PLAN.width/2).toFixed(1); cr.max=(PLAN.width/2).toFixed(1); cr.value=(PLAN.width/2).toFixed(1); clipPlane.constant=PLAN.width/2+5;
+  running=false; STATIONS.forEach(resetStation);
+  building=false; overlay.style.display='none';
+  setPlayUI(); updateReadout(); updateStats(); applyWireColor(document.getElementById('color').value); frameLine();
+}
+function rebuildStationDynamic(i,plan){ const old=STATIONS[i], wasFocus=(i===focusIdx);
+  clearCoil(old); clearField(old); stationsGroup.remove(old.group); old.group.traverse(o=>{ if(o.geometry && !o.isInstancedMesh)o.geometry.dispose(); });
+  const st=buildDynamic(buildCoilData(plan),i); st.startDelay=0; STATIONS[i]=st; resetStation(st);
+  if(wasFocus) buildField(st); applyWireColor(document.getElementById('color').value); updateReadout(); }
+function setCore(key){ coreKey=key; const mat=coreSlugMats[key]||coreSlugMats.steel;
+  STATIONS.forEach(st=>{ st.plan.muEff=effPerm(CORES[key].mu, st.plan.coreLen/(2*st.plan.coreR)); if(st.coreSlug){ st.coreSlug.visible=(key!=='air'); st.coreSlug.material=mat; } });
+  if(PLAN) PLAN.muEff=effPerm(CORES[key].mu, PLAN.coreLen/(2*PLAN.coreR)); updateReadout(); }
+function setFocus(i){ if(i<0||i>=STATIONS.length||i===focusIdx)return; clearField(STATIONS[focusIdx]); focusIdx=i; buildField(STATIONS[focusIdx]);
+  tweenTo(0,AXIS_Y,i*STATION_SP,theta,phi,radius); updateReadout(); }
+
+// ===================== READOUTS =====================
+const RHO_CU=1.724e-8, MU0=4*Math.PI*1e-7, AMBIENT=20, TEST_V=12;
+const rx=document.getElementById('rx'),rRpm=document.getElementById('rRpm'),rPitch=document.getElementById('rPitch'),rl=document.getElementById('rl'),rs=document.getElementById('rs'),lcd=document.getElementById('lcd');
+const eN=document.getElementById('eN'),eR=document.getElementById('eR'),eL=document.getElementById('eL'),eB=document.getElementById('eB'),eMu=document.getElementById('eMu'),epanel=document.getElementById('epanel');
+function curLayer(st){ if(st.layerIdx>=st.model.length) return st.plan.layers; return (st.model[st.layerIdx]?st.model[st.layerIdx].layer:0)+1; }
+function fmtR(R){ return R<1?(R*1000).toFixed(R<0.1?2:1)+' mΩ':R.toFixed(2)+' Ω'; }
+function fmtL(uH){ return uH>=1000?(uH/1000).toFixed(2)+' mH':uH.toFixed(1)+' µH'; }
+function fmtMu(m){ return m>=100?Math.round(m)+'×':m.toFixed(1)+'×'; }
+function computeElec(st){ const p=st.plan, N=(st.phase==='done'?st.model.length:st.woundRev), Lw=st.printedLen/1000, area=p.copperArea*1e-6;
+  const R20=area>0?RHO_CU*Lw/area:0, temp=Number.isFinite(st.tempC)?st.tempC:AMBIENT, R=R20*(1+0.00393*(temp-20)); const cl=Math.min(curLayer(st),p.layers);
+  const a=(p.coreR+cl*p.dia/2)/25.4,b=p.width/25.4,c=cl*p.dia/25.4; const den=6*a+9*b+10*c;
+  const mu=p.muEff||1; const L=(den>0?0.8*a*a*N*N/den:0)*mu; const B=MU0*N*1/(p.width/1000)*1000*mu;
+  return {N,R,R20,L_uH:L,B,temp,mu}; }
+// ---- engineering + dynamics (from physics build) ----
+function thermalResistance(p){ const surface=Math.max(1,Math.PI*p.OD*p.width)/1000; return clamp(42/surface,18,95); }
+function currentDensity(awg){ return awg<=16?3.5:awg<=24?4.5:5.5; }            // A/mm^2 design estimate
+function fillFactor(p){ const cu=p.totalTurns*p.copperArea, win=Math.max(1,p.width*Math.max(p.wireOD,p.OD-p.coreR*2)); return clamp(cu/win*100,1,96); }
+function engineering(p,tl){ const area=p.copperArea, Ilim=Math.max(0.03,area*currentDensity(p.awg));
+  const Rfull=RHO_CU*((tl||0)/1000)/(area*1e-6), power=Ilim*Ilim*Rfull;
+  const mass=((tl||0)/1000)*area*1e-6*8960, cost=mass*13.5, heat=power*thermalResistance(p);
+  return {Ilim,power,mass,cost,heat,fill:fillFactor(p),Rfull}; }
+function validate(p){ const issues=[],clr=p.pitch-p.wireOD,ff=fillFactor(p);
+  if(p.pitch<p.wireOD*0.99)issues.push('Pitch below insulated wire OD — overlap risk.');
+  if(clr<-0.002)issues.push('Negative insulation clearance between turns.');
+  if(ff>82)issues.push('Packing too dense for reliable enamel clearance.');
+  if(p.mode!=='orthocyclic'&&p.layers>2)issues.push('Use orthocyclic layering for multi-layer coils.');
+  return {ok:issues.length===0,issues,clr,ff}; }
+let globT=0;
+function tensionWindow(awg){ return awg<=16?[0.12,0.55]:[0.035,0.18]; }
+function stepPhysics(p,st,dt,speed){
+  const prog=st.woundRev; const progFrac=clamp(prog/Math.max(1,p.totalTurns),0,1);
+  const spoolRmm=8+22*Math.sqrt(Math.max(0.05,1-progFrac)), spoolR=spoolRmm/1000;
+  const dragTorque=0.0012+0.00008*speed+Math.abs(st.rpm)*0.000002;
+  const inlet=dragTorque/Math.max(0.004,spoolR);
+  const guideOut=inlet*Math.exp(0.13*Math.PI*0.72);
+  const win=tensionWindow(p.awg), target=(win[0]+win[1])/2;
+  const meas=(st.phase==='winding')? (guideOut*0.38+target*0.62)+Math.sin(globT*7+(st._jit||0))*target*0.035 : 0;
+  const coilR=(p.coreR+p.wc+Math.min(p.layers-1,Math.floor(prog/Math.max(1,p.turnsPerLayer)))*p.radialStep)/1000;
+  const accel=(st.rpm-(st._prevRpm||0))/Math.max(dt,0.016); st._prevRpm=st.rpm;
+  const loadT=meas*coilR+dragTorque*0.34+Math.abs(accel)*0.000035;
+  const maxT=Math.max(0.08,(p.awg<=16?1.26:0.45)*Math.max(0.22,1-Math.max(0,st.rpm-180)/520));
+  const ratio=loadT/maxT, risk=ratio>0.86?'HIGH':ratio>0.64?'MED':'LOW';
+  // transient thermal (RC): heat only when current flows (energized) or self-heat while winding is negligible
+  const eng=engineering(p,st.totalLen); const Rhot=Math.max(1e-4,eng.Rfull*(1+0.00393*((st.tempC||AMBIENT)-20)));
+  const current=energized?Math.min(eng.Ilim*1.35,TEST_V/Rhot):0; const power=current*current*Rhot;
+  const tau=32+p.layers*8, targetRise=power*thermalResistance(p);
+  if(!Number.isFinite(st.tempC))st.tempC=AMBIENT;
+  st.tempC+=((targetRise-(st.tempC-AMBIENT))/tau)*dt;
+  const tOk=(meas===0)||(meas>=win[0]&&meas<=win[1]), thOk=st.tempC<105, tqOk=ratio<0.92, v=validate(p);
+  st.phys={tension:meas,dragTorque,ratio,risk,current,power,tempC:st.tempC,Ilim:eng.Ilim,tensionOk:tOk,thermalOk:thOk,torqueOk:tqOk,ok:v.ok&&tOk&&thOk&&tqOk,issues:v.issues,fill:eng.fill};
+}
+function updateReadout(){ const st=STATIONS[focusIdx]; if(!st) return; const p=st.plan;
+  document.querySelector('.lcd .hd').textContent='Station '+(focusIdx+1)+(jobShop?' · job '+((focusIdx%4)+1):'');
+  rx.textContent=st.carriage.position.x.toFixed(1); rRpm.textContent=Math.round(st.rpm); rPitch.textContent=p.dia.toFixed(2);
+  rl.textContent=curLayer(st)+' / '+p.layers;
+  const ph=st.phase, t=ph==='winding'?'WINDING':ph==='homing'?'SPIN-UP':ph==='done'?'COMPLETE':'READY'; rs.textContent=t;
+  lcd.classList.toggle('run',ph==='winding'); lcd.classList.toggle('busy',ph==='homing');
+  const e=computeElec(st); eN.textContent=Math.round(e.N); eR.textContent=fmtR(e.R); eL.textContent=fmtL(e.L_uH); eB.textContent=energized?e.B.toFixed(2)+' mT':'— mT';
+  if(eMu)eMu.textContent=CORES[coreKey].name+' · µ '+fmtMu(e.mu);
+  if(eT)eT.textContent=(e.temp).toFixed(0)+' °C';
+  const px=st.phys; if(px&&pTen){ pTen.textContent=px.tension.toFixed(2)+' N'; pTq.textContent=(px.ratio*100).toFixed(0)+' %'; pTq.style.color=px.ratio>0.86?'#ff6b5f':px.ratio>0.64?'#e89a52':'';
+    pI.textContent=energized?px.current.toFixed(2)+' A':'— A'; pP.textContent=energized?px.power.toFixed(2)+' W':'— W'; pFill.textContent=px.fill.toFixed(0)+' %';
+    pStat.textContent=px.ok?'All process windows pass':(px.issues[0]||(!px.thermalOk?'Coil temperature too high':!px.torqueOk?'Torque margin too low':'Tension outside window'));
+    pStat.className='pstat '+(px.ok?'ok':(px.thermalOk&&px.torqueOk?'hot':'bad')); } }
+const eT=document.getElementById('eT');
+const pTen=document.getElementById('pTen'),pTq=document.getElementById('pTq'),pI=document.getElementById('pI'),pP=document.getElementById('pP'),pFill=document.getElementById('pFill'),pStat=document.getElementById('pStat');
+const sStations=document.getElementById('sStations'),sDone=document.getElementById('sDone'),sRate=document.getElementById('sRate'),sFil=document.getElementById('sFil');
+let runClock=0;
+function updateStats(){ sStations.textContent=stationN; let done=0,copper=0,active=0;
+  STATIONS.forEach(st=>{ done+=st.completed; copper+=st.printedLen; if(st.phase==='winding'||st.phase==='homing')active++; });
+  sDone.textContent=done; sFil.textContent=(copper/1000).toFixed(1)+' m';
+  const rate=runClock>2?Math.round(done/runClock*3600):0; sRate.textContent=rate+' /hr'; }
+
+// ===================== CAMERA =====================
+const target=new T.Vector3(0,AXIS_Y,0);
+let radius=300,theta=0.9,phi=1.1,camTween=null,autoRotate=false;
+function applyCam(){ phi=Math.max(0.16,Math.min(Math.PI-0.12,phi)); radius=Math.max(120,Math.min(2800,radius));
+  camera.position.set(target.x+radius*Math.sin(phi)*Math.sin(theta),target.y+radius*Math.cos(phi),target.z+radius*Math.sin(phi)*Math.cos(theta)); camera.lookAt(target); }
+function tweenTo(tx,ty,tz,th,ph,rad){ camTween={fx:target.x,fy:target.y,fz:target.z,fT:theta,fP:phi,fR:radius,tx,ty,tz,tT:th,tP:ph,tR:rad,t:0}; }
+function updateTween(dt){ if(!camTween)return; camTween.t=Math.min(1,camTween.t+dt/0.7); const e=camTween.t*camTween.t*(3-2*camTween.t);
+  target.set(camTween.fx+(camTween.tx-camTween.fx)*e,camTween.fy+(camTween.ty-camTween.fy)*e,camTween.fz+(camTween.tz-camTween.fz)*e);
+  theta=camTween.fT+(camTween.tT-camTween.fT)*e; phi=camTween.fP+(camTween.tP-camTween.fP)*e; radius=camTween.fR+(camTween.tR-camTween.fR)*e;
+  if(camTween.t>=1)camTween=null; applyCam(); }
+function frameLine(){ const cz=(stationN-1)*STATION_SP/2; tweenTo(0,AXIS_Y,cz,0.9,1.05,Math.max(300,stationN*110+160)); }
+function frameStation(){ const z=focusIdx*STATION_SP; tweenTo(0,AXIS_Y,z,0.85,1.08,210); }
+applyCam();
+let dragging=false,lastX=0,lastY=0,pinchD=0; const el=renderer.domElement;
+function down(x,y){dragging=true;lastX=x;lastY=y;camTween=null;}
+function move(x,y){ if(!dragging)return; theta-=(x-lastX)*0.005; phi-=(y-lastY)*0.005; lastX=x;lastY=y; applyCam(); }
+function up(){dragging=false;}
+el.addEventListener('mousedown',e=>down(e.clientX,e.clientY)); addEventListener('mousemove',e=>move(e.clientX,e.clientY)); addEventListener('mouseup',up);
+el.addEventListener('wheel',e=>{e.preventDefault();radius+=e.deltaY*0.3;camTween=null;applyCam();},{passive:false});
+el.addEventListener('touchstart',e=>{ if(e.touches.length===1)down(e.touches[0].clientX,e.touches[0].clientY); else if(e.touches.length===2)pinchD=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); },{passive:false});
+el.addEventListener('touchmove',e=>{ e.preventDefault(); if(e.touches.length===1)move(e.touches[0].clientX,e.touches[0].clientY); else if(e.touches.length===2){const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);radius+=(pinchD-d)*0.6;pinchD=d;applyCam();} },{passive:false});
+el.addEventListener('touchend',up);
+
+// ===================== UI =====================
+const playBtn=document.getElementById('playBtn'),playLbl=document.getElementById('playLbl'),playIcon=document.getElementById('playIcon'),speedEl=document.getElementById('speed');
+function setPlayUI(){ playLbl.textContent=running?'Pause':'Run Line'; playIcon.innerHTML=running?'<path d="M6 5h4v14H6zM14 5h4v14h-4z"/>':'<path d="M8 5v14l11-7z"/>'; }
+function toggleRun(){ if(building)return; ensureAudio(); running=!running;
+  if(running){ STATIONS.forEach((st,i)=>{ if(st.phase==='idle'||st.phase==='done'){ if(st.phase==='done'){resetStation(st);} st.startDelay=i*0.5; } }); }
+  setPlayUI(); }
+playBtn.addEventListener('click',toggleRun);
+document.getElementById('resetBtn').addEventListener('click',()=>{ running=false; runClock=0; STATIONS.forEach(st=>{st.completed=0; resetStation(st);}); setPlayUI(); updateReadout(); updateStats(); });
+
+const presetSel=document.getElementById('modelSel'),awgSel=document.getElementById('awgSel'),turnsIn=document.getElementById('turnsIn'),modeSel=document.getElementById('modeSel'),spacingEl=document.getElementById('spacing'),stationsSel=document.getElementById('stationsSel');
+[12,14,16,18,20,22,24,26,28,30,32,34,36,38,40].forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent='AWG '+n+'  ('+awgDia(n).toFixed(awgDia(n)<0.3?3:2)+' mm)'; awgSel.appendChild(o); });
+function syncControls(){ presetSel.value=PARAMS.preset; awgSel.value=PARAMS.awg; turnsIn.value=PARAMS.turns; modeSel.value=PARAMS.mode; spacingEl.value=PARAMS.spacing; stationsSel.value=stationN; spacingEl.parentElement.style.opacity=(PARAMS.mode==='spaced')?1:0.4; }
+function loadPreset(name){ const p=PRESETS[name]; if(!p)return; PARAMS.preset=name; PARAMS.coreR=p.coreR; PARAMS.width=p.width; PARAMS.awg=p.awg; PARAMS.turns=p.turns; }
+function specChanged(){ PARAMS.preset='custom'; PARAMS.awg=parseInt(awgSel.value); PARAMS.turns=Math.max(1,parseInt(turnsIn.value)||1); PARAMS.mode=modeSel.value; PARAMS.spacing=parseFloat(spacingEl.value); syncControls();
+  if(jobShop) rebuildStationDynamic(focusIdx, planCoil(PARAMS)); else rebuild(); }
+presetSel.addEventListener('change',e=>{ if(e.target.value==='custom'){PARAMS.preset='custom';syncControls();return;} loadPreset(e.target.value); syncControls(); rebuild(); });
+awgSel.addEventListener('change',specChanged); turnsIn.addEventListener('change',specChanged); modeSel.addEventListener('change',specChanged);
+spacingEl.addEventListener('input',()=>{ if(modeSel.value!=='spaced')modeSel.value='spaced'; specChanged(); });
+stationsSel.addEventListener('change',e=>{ stationN=parseInt(e.target.value); rebuild(); });
+document.getElementById('coreSel').addEventListener('change',e=>setCore(e.target.value));
+document.getElementById('jobShopChk').addEventListener('change',e=>{ jobShop=e.target.checked; rebuild(); });
+// click-to-focus
+const raycaster=new T.Raycaster(), ndc=new T.Vector2();
+function tryFocus(px,py){ const r=el.getBoundingClientRect(); ndc.x=((px-r.left)/r.width)*2-1; ndc.y=-((py-r.top)/r.height)*2+1; raycaster.setFromCamera(ndc,camera);
+  const hits=raycaster.intersectObjects(STATIONS.map(s=>s.pick),false); if(hits.length) setFocus(hits[0].object.userData.idx); }
+let _dx=0,_dy=0,_dt=0;
+el.addEventListener('mousedown',e=>{_dx=e.clientX;_dy=e.clientY;_dt=performance.now();});
+el.addEventListener('mouseup',e=>{ if(Math.hypot(e.clientX-_dx,e.clientY-_dy)<6 && performance.now()-_dt<450) tryFocus(e.clientX,e.clientY); });
+el.addEventListener('touchstart',e=>{ if(e.touches.length===1){_dx=e.touches[0].clientX;_dy=e.touches[0].clientY;_dt=performance.now();} },{passive:true});
+el.addEventListener('touchend',e=>{ const t=e.changedTouches[0]; if(t && Math.hypot(t.clientX-_dx,t.clientY-_dy)<8 && performance.now()-_dt<450) tryFocus(t.clientX,t.clientY); });
+
+const swatchHexes=['#c8742a','#e89a52','#8c4a1f','#b0bec9','#c0392b','#2f7d32','#1f6feb','#1c1f26'];
+const swWrap=document.getElementById('swatches'),colorInput=document.getElementById('color');
+function applyWireColor(hex){ wireColor.set(hex);
+  STATIONS.forEach(st=>{ if(st.spoolWind){ st.spoolWind.material.color.set(hex); st.spoolWind.material.map=txCopper(hex); st.spoolWind.material.needsUpdate=true; } if(st.feedLine)st.feedLine.material.color.set(hex); setSolid(st,st.layerIdx); });
+  [...swWrap.children].forEach(s=>s.classList.toggle('sel',s.dataset.c===hex)); colorInput.value=hex.length===7?hex:'#c8742a'; }
+swatchHexes.forEach(c=>{ const s=document.createElement('div'); s.className='sw'+(c==='#c8742a'?' sel':''); s.style.background=c; s.dataset.c=c;
+  s.addEventListener('click',()=>{ document.getElementById('rainbow').checked=false; rainbow=false; applyWireColor(c); }); swWrap.appendChild(s); });
+colorInput.addEventListener('input',e=>{ document.getElementById('rainbow').checked=false; rainbow=false; applyWireColor(e.target.value); });
+document.getElementById('rainbow').addEventListener('change',e=>{ rainbow=e.target.checked; STATIONS.forEach(st=>setSolid(st,st.layerIdx)); });
+
+function setActive(id,on){ document.getElementById(id).classList.toggle('active',on); }
+document.getElementById('vLine').addEventListener('click',frameLine);
+document.getElementById('vStation').addEventListener('click',frameStation);
+document.getElementById('vTop').addEventListener('click',()=>tweenTo(0,AXIS_Y,(stationN-1)*STATION_SP/2,0.001,0.2,Math.max(320,stationN*120)));
+const bAuto=document.getElementById('bAuto'); bAuto.addEventListener('click',()=>{autoRotate=!autoRotate;setActive('bAuto',autoRotate);});
+const clipUI=document.getElementById('clipUI'),clipR=document.getElementById('clipR'),bClip=document.getElementById('bClip');
+function applyClip(){ clipping=bClip.classList.contains('active'); clipUI.classList.toggle('show',clipping); if(clipping)clipPlane.constant=parseFloat(clipR.value);
+  solidMat.clippingPlanes=clipping?[clipPlane]:[]; solidMat.needsUpdate=true; STATIONS.forEach(st=>{ if(st.partialMesh){st.partialMesh.material.clippingPlanes=clipping?[clipPlane]:[];st.partialMesh.material.needsUpdate=true;} }); }
+bClip.addEventListener('click',()=>{ setActive('bClip',!bClip.classList.contains('active')); applyClip(); });
+clipR.addEventListener('input',e=>{ clipPlane.constant=parseFloat(e.target.value); });
+document.getElementById('bShot').addEventListener('click',()=>{ try{ renderer.render(scene,camera); const a=document.createElement('a'); a.download='coil-line.png'; a.href=renderer.domElement.toDataURL('image/png'); a.click(); }catch(e){} });
+
+addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return; if(e.code==='Space'){e.preventDefault();toggleRun();} else if(e.key==='r'||e.key==='R'){running=false;runClock=0;STATIONS.forEach(st=>{st.completed=0;resetStation(st);});setPlayUI();updateStats();} });
+
+// energize
+const energizeBtn=document.getElementById('energize');
+function setEnergize(on){ energized=on; energizeBtn.classList.toggle('on',on); energizeBtn.textContent=on?'Energized':'Energize'; epanel.classList.toggle('on',on); updateReadout(); }
+energizeBtn.addEventListener('click',()=>{ ensureAudio(); setEnergize(!energized); });
+
+// ===================== AUDIO =====================
+let audioCtx=null,oscA=null,oscB=null,oscGain=null,soundOn=true;
+function ensureAudio(){ if(audioCtx){ if(audioCtx.state==='suspended')audioCtx.resume(); return; }
+  try{ const AC=window.AudioContext||window.webkitAudioContext; if(!AC)return; audioCtx=new AC();
+    oscA=audioCtx.createOscillator();oscA.type='sawtooth';oscA.frequency.value=55; oscB=audioCtx.createOscillator();oscB.type='triangle';oscB.frequency.value=110;
+    const f=audioCtx.createBiquadFilter();f.type='lowpass';f.frequency.value=760; oscGain=audioCtx.createGain();oscGain.gain.value=0;
+    oscA.connect(f);oscB.connect(f);f.connect(oscGain);oscGain.connect(audioCtx.destination); oscA.start();oscB.start(); }catch(e){audioCtx=null;} }
+function updateAudio(dt){ if(!audioCtx||!oscGain)return; let active=0,rpm=0; STATIONS.forEach(st=>{ if(st.phase==='winding'||st.phase==='homing'){active++;rpm=Math.max(rpm,st.rpm);} });
+  const f=45+rpm*0.4; oscA.frequency.value=f; oscB.frequency.value=f*2.01; const targ=(soundOn&&active>0)?Math.min(0.07,0.025+active*0.012):0;
+  oscGain.gain.value+=(targ-oscGain.gain.value)*Math.min(1,dt*4); }
+const bSound=document.getElementById('bSound'); bSound.classList.add('active');
+bSound.addEventListener('click',()=>{ soundOn=!soundOn; if(soundOn)ensureAudio(); bSound.classList.toggle('active',soundOn); bSound.setAttribute('data-tip',soundOn?'Sound on':'Sound off'); });
+
+// ===================== BOM =====================
+function bomRows(){ return [
+  ['Aluminium extrusion 2040 V-slot','300 mm cut','station',4],
+  ['Aluminium extrusion 2020 V-slot','120 mm upright','station',3],
+  ['Corner bracket + M5 T-nut/bolt set','3-hole, black','station',8],
+  ['NEMA 23 stepper motor','57×57, 1.26 N·m (spindle)','station',1],
+  ['NEMA 17 stepper motor','42×42, 0.45 N·m (traverse)','station',1],
+  ['5 mm flexible shaft coupling','5→8 mm, clamp','station',1],
+  ['3-jaw self-centring chuck','50 mm','station',1],
+  ['Tailstock live center','MT1, bearing','station',1],
+  ['MGN12 linear rail + MGN12H block','250 mm','station',1],
+  ['T8 lead screw + brass anti-backlash nut','250 mm, 2 mm pitch','station',1],
+  ['608ZZ ball bearing','8×22×7','station',4],
+  ['Wire tensioner (felt pads + spring)','adjustable','station',1],
+  ['Spool holder rod + collars','12 mm','station',1],
+  ['Nylon bobbin','machined / SLS','station',1],
+  ['Magnetic core slug',CORES[coreKey].name+(coreKey==='air'?' (none — air core)':' rod, ground'),'station',(coreKey==='air'?0:1)],
+  ['TB6600 stepper driver','4 A microstep','station',2],
+  ['ESP32 motion controller','dual-axis FW','station',1],
+  ['Cable chain + harness','15×30, looms','station',1],
+  ['Magnet wire spool','AWG '+(PLAN?PLAN.awg:'—')+', enamelled Cu','station',1],
+  ['24 V 350 W PSU','meanwell-class','line',1],
+  ['Emergency stop + safety relay','line interlock','line',1]
+]; }
+function openBom(){ const rows=bomRows(); const N=stationN; const st=STATIONS[focusIdx], P=st?st.plan:PLAN, tl=st?st.totalLen:0, eg=engineering(P,tl); let html='<h2>Bill of Materials</h2>';
+  html+='<div class="sub">'+(P? (P.mode+' · AWG '+P.awg+' · '+P.totalTurns+' turns · OD '+P.OD.toFixed(1)+' mm · '+CORES[coreKey].name+' · '+(eg.mass*1000).toFixed(1)+' g Cu / coil ($'+eg.cost.toFixed(2)+')') : '')+'  —  '+N+(jobShop?'-station mixed line':'-station line')+'</div>';
+  html+='<table><tr><th>Component</th><th>Specification</th><th class="q">Per&nbsp;stn</th><th class="q">Total</th></tr>';
+  rows.forEach(r=>{ const total=r[2]==='station'?r[3]*N:r[3]; html+='<tr><td>'+r[0]+'</td><td class="spec">'+r[1]+'</td><td class="q">'+(r[2]==='station'?r[3]:'—')+'</td><td class="q">'+total+'</td></tr>'; });
+  html+='</table><div class="foot"><span class="note">Scope per '+N+'-station line · generic catalogue parts</span><span style="display:flex;gap:8px"><button class="btn" id="bomCsv">Download CSV</button><button class="btn" id="bomClose">Close</button></span></div>';
+  document.getElementById('bomCard').innerHTML=html; document.getElementById('bomOverlay').classList.add('show');
+  document.getElementById('bomClose').onclick=()=>document.getElementById('bomOverlay').classList.remove('show');
+  document.getElementById('bomCsv').onclick=()=>{ let csv='Component,Specification,Per Station,Total ('+N+'x)\n';
+    rows.forEach(r=>{ const total=r[2]==='station'?r[3]*N:r[3]; csv+='"'+r[0]+'","'+r[1]+'",'+(r[2]==='station'?r[3]:'')+','+total+'\n'; });
+    const a=document.createElement('a'); a.download='coil-line-bom.csv'; a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv); a.click(); }; }
+document.getElementById('bBom').addEventListener('click',openBom);
+document.getElementById('bomOverlay').addEventListener('click',e=>{ if(e.target.id==='bomOverlay')document.getElementById('bomOverlay').classList.remove('show'); });
+
+// ===================== SPEC EXPORT =====================
+function fullSpec(){ const st=STATIONS[focusIdx], P=st?st.plan:PLAN, tl=st?st.totalLen:0;
+  const N=P.totalTurns,Lw=tl/1000,area=P.copperArea*1e-6,R=area>0?RHO_CU*Lw/area:0, mu=P.muEff||1;
+  const cl=P.layers,a=(P.coreR+cl*P.dia/2)/25.4,b=P.width/25.4,c=cl*P.dia/25.4,L=0.8*a*a*N*N/(6*a+9*b+10*c)*mu,B=MU0*N/(P.width/1000)*1000*mu;
+  const eng=engineering(P,tl); return {N,R,L,B,Lw,OD:P.OD,eng,p:P,mu}; }
+document.getElementById('exportBtn').addEventListener('click',()=>{ const s=fullSpec(),P=s.p,W=820,H=1180,scl=2,cv=document.createElement('canvas'); cv.width=W*scl;cv.height=H*scl;const x=cv.getContext('2d');x.scale(scl,scl);
+  x.fillStyle='#0d1014';x.fillRect(0,0,W,H); x.fillStyle='#c8742a';x.fillRect(0,0,W,8);
+  x.fillStyle='#eaeef5';x.font='700 30px ui-monospace,monospace';x.fillText('COIL FOUNDRY',48,78);
+  x.fillStyle='#8b95a6';x.font='13px ui-monospace,monospace';x.fillText('WIND SPEC · STATION '+(focusIdx+1)+' · '+stationN+'-STATION LINE · '+new Date().toLocaleString(),48,104);
+  x.strokeStyle='#c8742a';x.lineWidth=3;for(let i=0;i<10;i++){x.beginPath();x.ellipse(560+i*18,76,9,26,0,0,Math.PI*2);x.stroke();}
+  x.strokeStyle='#22303f';x.beginPath();x.moveTo(48,132);x.lineTo(W-48,132);x.stroke();
+  const rows=[['Pattern',P.mode[0].toUpperCase()+P.mode.slice(1)+(P.mode==='spaced'?'  ('+P.spacing.toFixed(1)+'×)':'')],
+    ['Wire gauge','AWG '+P.awg+'  ('+P.copperDia.toFixed(P.copperDia<0.3?3:2)+' mm Cu · '+P.dia.toFixed(2)+' mm OD)'],['Total turns',String(P.totalTurns)],
+    ['Layers',P.layers+'  ('+P.turnsPerLayer+'/layer · last '+Math.round(P.fill*100)+'%)'],['Fill factor',s.eng.fill.toFixed(0)+' %'],['Bore dia',(P.coreR*2).toFixed(1)+' mm'],
+    ['Core material',CORES[coreKey].name+'  (µ_eff '+fmtMu(s.mu)+')'],
+    ['Winding length',P.width.toFixed(1)+' mm'],['Outer dia',s.OD.toFixed(1)+' mm'],['Wire length / coil',s.Lw.toFixed(2)+' m'],
+    ['Copper mass / coil',(s.eng.mass*1000).toFixed(1)+' g'],['Copper cost / coil','$'+s.eng.cost.toFixed(2)],
+    ['DC resistance @20°C',(s.R<1?(s.R*1000).toFixed(1)+' mΩ':s.R.toFixed(3)+' Ω')],['Inductance',(s.L>=1000?(s.L/1000).toFixed(2)+' mH':s.L.toFixed(1)+' µH')],
+    ['Rated current',s.eng.Ilim.toFixed(2)+' A  ('+s.eng.power.toFixed(1)+' W)'],['Axial field @1A',s.B.toFixed(2)+' mT'],['Line throughput',stationN+(jobShop?' coils (mixed jobs)':' coils in parallel')]];
+  let yy=178; rows.forEach((r,i)=>{ if(i%2===0){x.fillStyle='#11161c';x.fillRect(48,yy-24,W-96,36);} x.fillStyle='#8b95a6';x.font='14px ui-monospace,monospace';x.fillText(r[0],64,yy);
+    x.fillStyle='#eaeef5';x.font='600 16px ui-monospace,monospace';x.fillText(r[1],360,yy);yy+=42; });
+  x.fillStyle='#c8742a';x.font='700 13px ui-monospace,monospace';x.fillText('Time is finite — save time for what matters most.',48,H-40);
+  const a=document.createElement('a');a.download='coil-spec.png';a.href=cv.toDataURL('image/png');a.click(); });
+
+// ===================== LOOP =====================
+const clock=new T.Clock();
+function animate(){ requestAnimationFrame(animate); const dt=Math.min(0.05,clock.getDelta()); const speed=parseFloat(speedEl.value);
+  if(running) runClock+=dt; globT+=dt;
+  STATIONS.forEach((st,i)=>{ stepStation(st,dt,speed); stepPhysics(st.plan,st,dt,speed);
+    const hot=(st.phase==='winding');
+    st.cl.intensity+=((hot?1.6:0)-st.cl.intensity)*0.2; st.glow.material.opacity+=((hot?0.8:0)-st.glow.material.opacity)*0.2;
+    const R=(st.layerIdx<st.model.length?st.model[st.layerIdx].R:(st.model.length?st.model[st.model.length-1].R:st.plan.coreR));
+    st.glow.position.set(st.carriage.position.x,AXIS_Y+R, 0); st.cl.position.copy(st.glow.position);
+    updateFeed(st,speed);
+    if(st.spoolWind){ if(hot||st.phase==='homing') st.spool.rotation.z-=speed*0.9*dt; const sc=spoolRadius(st)/st.RF; st.spoolWind.scale.set(sc,1,sc); }
+    st.ledMat.emissiveIntensity = hot?0.95:(st.phase==='done'?0.3:0.55);
+    const heat=clamp((st.tempC-AMBIENT)/85,0,1); st.ledMat.color.setRGB(0.04+heat*0.9, 0.6-heat*0.4, 0.13-heat*0.1);
+    if(st.bob){ st.bob.material.emissive.setRGB(0.7*heat,0.14*heat,0.02*heat); st.bob.material.emissiveIntensity=heat*1.1; }
+  });
+  // field on focused station, intensity scaled by effective permeability
+  const fs=STATIONS[focusIdx];
+  fieldVis+=((energized?1:0)-fieldVis)*Math.min(1,dt*6);
+  if(fs){ const wf=Math.min(1,(fs.layerIdx)/Math.max(1,fs.model.length)+0.05);
+    const muF=clamp(Math.log10((fs.plan.muEff||1)*10)/2,0.45,1.7);
+    fieldMat.opacity=Math.min(1,0.55*fieldVis*(0.35+0.65*wf)*muF);
+    if(fs.fieldArrow)fs.fieldArrow.material.opacity=Math.min(1,0.9*fieldVis*wf*muF);
+    if(fs.poleN){fs.poleN.material.opacity=fs.poleS.material.opacity=0.85*fieldVis*wf;}
+    if(fs.bob&&fieldVis>0.02){fs.bob.material.emissive.setHex(0x123040);fs.bob.material.emissiveIntensity=0.5*fieldVis;}
+    if(fieldVis>0.01){ const flow=dt*0.18*(0.6+speed*0.05); fs.fluxParticles.forEach(fp=>{ fp.t=(fp.t+flow)%1; const n=fp.pts.length,f=fp.t*(n-1),i=Math.floor(f),fr=f-i;
+      fp.sprite.position.lerpVectors(fp.pts[i],fp.pts[Math.min(i+1,n-1)],fr); fp.sprite.material.opacity=0.9*fieldVis; }); }
+    else fs.fluxParticles.forEach(fp=>fp.sprite.material.opacity=0);
+  }
+  updateTween(dt); if(autoRotate&&!dragging&&!camTween){ theta+=dt*0.16; applyCam(); }
+  updateAudio(dt); updateReadout(); updateStats();
+  renderer.render(scene,camera);
+}
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+// boot
+ovText.textContent='Initializing stations…';
+loadPreset('large'); syncControls(); rebuild(); animate();
+})();
+</script>
+</body>
+</html>
