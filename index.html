@@ -27,7 +27,8 @@
   .chip .lab{font-family:var(--mono);font-size:8.5px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase;}
   .chip .val{font-family:var(--mono);font-size:13.5px;font-weight:600;margin-top:2px;color:var(--ink);}
 
-  .rail{position:absolute;right:18px;top:96px;z-index:6;display:flex;flex-direction:column;gap:10px;align-items:flex-end;}
+  .rail{position:absolute;right:18px;top:96px;z-index:6;display:flex;flex-direction:column;gap:10px;align-items:flex-end;max-height:calc(100dvh - 120px);overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;}
+  .rail::-webkit-scrollbar{width:0;}
   .lcd,.epanel{width:200px;font-family:var(--mono);border-radius:11px;padding:12px 14px;overflow:hidden;}
   .lcd{background:linear-gradient(180deg,#0d1820,#08111a);border:1px solid #12423f;
     box-shadow:0 0 0 1px #0008,0 0 26px -8px var(--cyan),inset 0 0 30px -16px var(--cyan);}
@@ -75,8 +76,8 @@
   .clip input[type=range]{writing-mode:vertical-lr;direction:rtl;width:6px;height:150px;accent-color:var(--accent);}
   .clip .lab{font-family:var(--mono);font-size:8.5px;color:var(--dim);letter-spacing:.1em;}
 
-  .dock{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:6;width:min(97vw,1040px);background:var(--panel);border:1px solid var(--line);border-radius:16px;backdrop-filter:blur(12px);overflow:hidden;}
-  .controls{display:flex;align-items:center;gap:10px;padding:12px 14px;flex-wrap:wrap;justify-content:center;}
+  .dock{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:6;width:min(97vw,1040px);max-height:46dvh;background:var(--panel);border:1px solid var(--line);border-radius:16px;backdrop-filter:blur(12px);overflow:hidden;}
+  .controls{display:flex;align-items:center;gap:10px;padding:12px 14px;flex-wrap:wrap;justify-content:center;max-height:46dvh;overflow-y:auto;overflow-x:hidden;}
   .sep{width:1px;align-self:stretch;background:var(--line-soft);}
   button.btn{font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);background:#1c212b;border:1px solid var(--line);padding:9px 13px;border-radius:9px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;}
   button.btn:hover{border-color:#3a455a;background:#232a37;}
@@ -122,12 +123,19 @@
   .spin{width:30px;height:30px;border:3px solid #222a36;border-top-color:var(--accent);border-radius:50%;margin:0 auto 16px;animation:sp 1s linear infinite;}
   @keyframes sp{to{transform:rotate(360deg);}}
 
+  @media (max-width:980px){
+    .rail{top:88px;} .lcd,.epanel,.ppanel{width:178px;}
+    .controls{gap:8px;padding:10px;}
+  }
   @media (max-width:640px){
-    .rail{top:auto;bottom:184px;right:12px;gap:8px;}
-    .lcd,.epanel{width:150px;padding:10px;}
-    .tools{left:10px;gap:6px;} .tbtn{width:38px;height:38px;}
-    .clip{left:56px;} .chip{min-width:0;padding:6px 8px;} .chip .lab{font-size:8px;}
-    .hint{display:none;} .controls{gap:7px;padding:9px;} input[type=range].h{width:64px;}
+    .rail{top:60px;right:10px;gap:7px;max-height:calc(100dvh - 250px);}
+    .lcd,.epanel,.ppanel{width:140px;padding:9px 10px;font-size:11px;}
+    .lcd .r,.epanel .r,.ppanel .r{font-size:11px;line-height:1.7;}
+    .tools{left:10px;gap:6px;} .tbtn{width:36px;height:36px;} .tbtn svg{width:17px;height:17px;}
+    .clip{left:54px;} .chip{min-width:0;padding:6px 8px;} .chip .lab{font-size:8px;} .chip .val{font-size:12px;}
+    .brand span{display:none;}
+    .hint{display:none;} .controls{gap:7px;padding:9px;max-height:42dvh;} input[type=range].h{width:64px;}
+    .dock{max-height:44dvh;width:min(98vw,1040px);}
   }
   @media (prefers-reduced-motion:reduce){ .spin{animation:none;} }
 </style>
@@ -333,13 +341,14 @@ function layoutFloor(n,spacing){
   // yellow safety lanes either side of the line
   const lane=new T.MeshStandardMaterial({color:0xb8932a,roughness:0.8,metalness:0.1,emissive:0x1a1505,emissiveIntensity:0.4});
   [-95,95].forEach(x=>{ const s=new T.Mesh(new T.BoxGeometry(4,0.4,len),lane); s.position.set(x,0,(n-1)*spacing/2); ambient.add(s); });
-  // overhead light trusses
+  // overhead light trusses (emissive panels for every bay; real point lights capped for performance)
+  const lstep=Math.max(1,Math.ceil(n/6));
   for(let i=0;i<n;i++){ const z=i*spacing;
     const truss=new T.Mesh(new T.BoxGeometry(170,5,8),M.extr); truss.position.set(0,170,z); ambient.add(truss);
     [-70,70].forEach(x=>{ const col=new T.Mesh(new T.BoxGeometry(5,170,5),M.extr); col.position.set(x,85,z-90); ambient.add(col); });
     const pan=new T.Mesh(new T.BoxGeometry(150,2,6),new T.MeshStandardMaterial({color:0xdfe7f0,emissive:0xeaf2ff,emissiveIntensity:0.8}));
     pan.position.set(0,167,z); ambient.add(pan);
-    const pl=new T.PointLight(0xeaf2ff,0.5,260,2); pl.position.set(0,160,z); ambient.add(pl);
+    if(i%lstep===0){ const pl=new T.PointLight(0xeaf2ff,0.5*lstep,360,2); pl.position.set(0,160,z); ambient.add(pl); }
   }
 }
 
@@ -376,6 +385,11 @@ function makeRail(len,parent){ const g=new T.Group();
 }
 // 608 bearing ring
 function bearing(r,parent){ const b=mesh(new T.TorusGeometry(r,r*0.34,10,22),M.steel,0,0,0,parent); return b; }
+// supply-spool reel body: revolved I-profile with a real centre bore (reads as an "O"), axis along Z
+M.spool=new T.MeshStandardMaterial({color:0x24272e,roughness:0.62,metalness:0.12,side:T.DoubleSide});
+function spoolBody(parent){ const rb=3.2, rh=6, rf=26, W2=6.5, ft=2.4;
+  const pts=[ [rb,-(W2+ft)],[rf,-(W2+ft)],[rf,-W2],[rh,-W2],[rh,W2],[rf,W2],[rf,W2+ft],[rb,W2+ft] ].map(p=>new T.Vector2(p[0],p[1]));
+  const geo=new T.LatheGeometry(pts,48); const m=new T.Mesh(geo,M.spool); m.castShadow=true; m.receiveShadow=true; m.rotation.x=Math.PI/2; if(parent)parent.add(m); return m; }
 
 // ===================== DIMENSIONS / CONFIG =====================
 const AXIS_Y=52;           // coil axis height above floor (within station)
@@ -478,8 +492,8 @@ function staticTemplate(W){
   beam(34,4,'Y',M.alu,-50,AXIS_Y+20,-22,g);
   mesh(new T.TorusGeometry(5,1.6,10,24),M.steel,-50,AXIS_Y+36,-22,g).rotation.y=Math.PI/2;  // tensioner
   mesh(new T.BoxGeometry(26,30,12),M.box,70,28,30,g);                                        // control box
-  for(let i=0;i<5;i++) mesh(new T.BoxGeometry(20,1.2,1),M.cap,70,22+i*3,36,g);
-  mesh(new T.BoxGeometry(14,8,0.6),new T.MeshStandardMaterial({color:0x06181a,emissive:0x0a3b3a,emissiveIntensity:0.5}),74,38,36.6,g);
+  for(let i=0;i<5;i++) mesh(new T.BoxGeometry(20,1.2,1),M.cap,70,22+i*3,36.8,g);             // vents (proud of face z=36)
+  mesh(new T.BoxGeometry(14,8,0.6),new T.MeshStandardMaterial({color:0x06181a,emissive:0x0a3b3a,emissiveIntensity:0.5}),74,38,37.1,g);
   return g;
 }
 function buildStaticInstances(n,W){
@@ -500,17 +514,18 @@ function buildDynamic(data,i){
   mesh(new T.BoxGeometry(20,12,26),M.steel,0,18,38,carriage); mesh(new T.BoxGeometry(10,8,8),M.brass,0,18,32,carriage);
   beam(GY-18,5,'Y',M.alu,0,(18+GY)/2,40,carriage); beam(40,5,'Z',M.alu,0,GY,21,carriage);
   const eyelet=mesh(new T.TorusGeometry(3,1,10,20),M.bright,0,GY,0,carriage); eyelet.rotation.y=Math.PI/2;
-  // supply spool (rotates + depletes)
+  // supply spool (flanged reel with a real bore + copper pack that depletes to a ring)
   const spool=new T.Group(); spool.position.set(SX,SY,SZ); g.add(spool);
-  mesh(new T.CylinderGeometry(2.4,2.4,28,16),M.bright,0,0,-10,spool).rotation.x=Math.PI/2; bearing(4,spool).rotation.x=Math.PI/2;
-  const spoolWind=mesh(new T.CylinderGeometry(RF,RF,WW,40),new T.MeshStandardMaterial({map:txCopper('#'+wireColor.getHexString()),color:wireColor.clone(),roughness:0.42,metalness:0.85,envMapIntensity:1.1}),0,0,0,spool); spoolWind.rotation.x=Math.PI/2;
-  [WW/2+1.6,-WW/2-1.6].forEach(z=>mesh(new T.CylinderGeometry(26,26,3,40),M.box,0,0,z,spool).rotation.x=Math.PI/2);
+  mesh(new T.CylinderGeometry(2.4,2.4,30,16),M.bright,0,0,0,spool).rotation.x=Math.PI/2;   // mounting rod through bore
+  spoolBody(spool);                                                                         // flanged hub (O)
+  const spoolWind=mesh(new T.CylinderGeometry(RF,RF,WW-1,40),new T.MeshStandardMaterial({map:txCopper('#'+wireColor.getHexString()),color:wireColor.clone(),roughness:0.42,metalness:0.85,envMapIntensity:1.1}),0,0,0,spool); spoolWind.rotation.x=Math.PI/2;
+  const brg=bearing(4,spool); brg.position.z=WW/2+3;   // retaining ring on outer flange (in XY plane, axis Z)
   // feed wire
   const FEEDN=10, feedGeo=new T.BufferGeometry(); feedGeo.setAttribute('position',new T.Float32BufferAttribute(new Float32Array(FEEDN*3),3));
   const feedLine=new T.Line(feedGeo,new T.LineBasicMaterial({color:wireColor.clone()})); g.add(feedLine);
   // status LED
   const ledMat=new T.MeshStandardMaterial({color:0x0a2,emissive:0x2c7,emissiveIntensity:0.8});
-  mesh(new T.SphereGeometry(1.6,12,12),ledMat,62,40,37,g);
+  mesh(new T.SphereGeometry(1.6,12,12),ledMat,62,40,37.4,g);
   // spinning spindle: arbor + chuck + bobbin + flanges + core slug + coil
   const spindle=new T.Group(); spindle.position.set(0,AXIS_Y,0); g.add(spindle);
   mesh(new T.CylinderGeometry(3.2,3.2,width+90,20),M.bright,0,0,0,spindle).rotation.z=Math.PI/2;
@@ -524,11 +539,10 @@ function buildDynamic(data,i){
   // fixed (non-spinning) subgroup for field viz
   const fixed=new T.Group(); fixed.position.set(0,AXIS_Y,0); g.add(fixed);
   const glow=new T.Sprite(new T.SpriteMaterial({map:glowTex,blending:T.AdditiveBlending,depthWrite:false,opacity:0})); glow.scale.set(8,8,1); g.add(glow);
-  const cl=new T.PointLight(0xffb070,0,40,2); g.add(cl);
   // invisible pick target for click-to-focus
   const pick=new T.Mesh(new T.BoxGeometry(170,GY+70,130),new T.MeshBasicMaterial({colorWrite:false,depthWrite:false})); pick.position.set(0,(GY+70)/2-6,0); pick.userData.idx=i; g.add(pick);
   stationsGroup.add(g);
-  return Object.assign({ group:g, spindle, coilGroup, carriage, eyelet, spool, spoolWind, bob, coreSlug, ledMat, glow, cl, fixed, RF, WW, SX,SY,SZ, GY, flMat, feedGeo, feedLine, pick,
+  return Object.assign({ group:g, spindle, coilGroup, carriage, eyelet, spool, spoolWind, bob, coreSlug, ledMat, glow, fixed, RF, WW, SX,SY,SZ, GY, flMat, feedGeo, feedLine, pick,
     layerIdx:0, segF:0, woundRev:0, phase:'idle', printedLen:0, elapsed:0, rpm:0,
     solidMesh:null, partialMesh:null, homeT:0, startDelay:0, ejectT:0, completed:0,
     tempC:AMBIENT, _prevRpm:0, _jit:Math.random()*6.28, phys:null,
@@ -558,6 +572,7 @@ function clearCoil(st){ disposeMesh(st.coilGroup,st.solidMesh); st.solidMesh=nul
 // ===================== FIELD (focused station only) =====================
 const fieldMat=new T.LineBasicMaterial({color:0x4fc8ff,transparent:true,opacity:0,blending:T.AdditiveBlending,depthWrite:false});
 let energized=false, fieldVis=0;
+const contactLight=new T.PointLight(0xffb070,0,120,2); scene.add(contactLight);  // single warm light follows the focused contact point
 function clearField(st){ st.fieldLines.forEach(l=>{st.fixed.remove(l);l.geometry.dispose();}); st.fieldLines=[];
   st.fluxParticles.forEach(p=>st.fixed.remove(p.sprite)); st.fluxParticles=[];
   if(st.fieldArrow){st.fixed.remove(st.fieldArrow);st.fieldArrow=null;} if(st.poleN){st.fixed.remove(st.poleN,st.poleS);st.poleN=st.poleS=null;} st.fieldBuilt=false; }
@@ -575,7 +590,7 @@ function buildField(st){ clearField(st); const coreR=st.plan.coreR,layers=st.pla
 
 // ===================== FACTORY CONTROL =====================
 let running=false, stationN=4, autoRecycle=true;
-function spoolRadius(st){ const remain=Math.max(0,1-st.printedLen/st.capacity); return 6+(st.RF-6)*Math.sqrt(remain); }
+function spoolRadius(st){ const remain=Math.max(0,1-st.printedLen/st.capacity); return 8+(st.RF-8)*Math.sqrt(remain); }
 function updateFeed(st,speed){
   const ax=st.carriage.position.x;
   const R=(st.layerIdx<st.model.length?st.model[st.layerIdx].R:(st.model.length?st.model[st.model.length-1].R:st.plan.coreR));
@@ -882,15 +897,20 @@ function animate(){ requestAnimationFrame(animate); const dt=Math.min(0.05,clock
   if(running) runClock+=dt; globT+=dt;
   STATIONS.forEach((st,i)=>{ stepStation(st,dt,speed); stepPhysics(st.plan,st,dt,speed);
     const hot=(st.phase==='winding');
-    st.cl.intensity+=((hot?1.6:0)-st.cl.intensity)*0.2; st.glow.material.opacity+=((hot?0.8:0)-st.glow.material.opacity)*0.2;
+    st.glow.material.opacity+=((hot?0.8:0)-st.glow.material.opacity)*0.2;
     const R=(st.layerIdx<st.model.length?st.model[st.layerIdx].R:(st.model.length?st.model[st.model.length-1].R:st.plan.coreR));
-    st.glow.position.set(st.carriage.position.x,AXIS_Y+R, 0); st.cl.position.copy(st.glow.position);
+    st.glow.position.set(st.carriage.position.x,AXIS_Y+R, 0);
     updateFeed(st,speed);
     if(st.spoolWind){ if(hot||st.phase==='homing') st.spool.rotation.z-=speed*0.9*dt; const sc=spoolRadius(st)/st.RF; st.spoolWind.scale.set(sc,1,sc); }
     st.ledMat.emissiveIntensity = hot?0.95:(st.phase==='done'?0.3:0.55);
     const heat=clamp((st.tempC-AMBIENT)/85,0,1); st.ledMat.color.setRGB(0.04+heat*0.9, 0.6-heat*0.4, 0.13-heat*0.1);
     if(st.bob){ st.bob.material.emissive.setRGB(0.7*heat,0.14*heat,0.02*heat); st.bob.material.emissiveIntensity=heat*1.1; }
   });
+  // single shared contact light follows the focused station
+  const fc=STATIONS[focusIdx];
+  if(fc){ const fhot=(fc.phase==='winding'); const R=(fc.layerIdx<fc.model.length?fc.model[fc.layerIdx].R:(fc.model.length?fc.model[fc.model.length-1].R:fc.plan.coreR));
+    contactLight.position.set(fc.carriage.position.x, AXIS_Y+R, focusIdx*STATION_SP);
+    contactLight.intensity+=((fhot?1.7:0)-contactLight.intensity)*0.2; }
   // field on focused station, intensity scaled by effective permeability
   const fs=STATIONS[focusIdx];
   fieldVis+=((energized?1:0)-fieldVis)*Math.min(1,dt*6);
